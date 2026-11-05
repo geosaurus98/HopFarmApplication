@@ -1,0 +1,9 @@
+MenuID,Title,Subtitle,TargetView,IsForm,Roles,SortOrder,Icon
+M01,New Mite Sample,Record a sample bag in the field,Samples_Form,TRUE,"Collector,Analyst,Administrator",1,add
+M02,My Recent Samples,Samples you collected in the last 14 days,My Samples,FALSE,"Collector,Analyst,Administrator",2,list
+M03,Analyse Samples,Samples waiting for leaf analysis,Analyse Samples,FALSE,"Analyst,Administrator",3,microscope
+M04,Samples In Progress,Resume a paused analysis,In Progress,FALSE,"Analyst,Administrator",4,pause
+M05,Completed Samples,Search historical results,Completed Samples,FALSE,"Collector,Analyst,Administrator",5,check
+M06,Help and Reference,Mite identification and how-to guides,Help,FALSE,"Collector,Analyst,Administrator",6,help
+M07,Reports and Exports,Summaries and CSV export,Reports,FALSE,"Analyst,Administrator",7,chart
+M08,Administration,"Blocks, users and data quality",Admin,FALSE,Administrator,8,settings

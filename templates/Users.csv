@@ -1,0 +1,4 @@
+UserEmail,UserName,Role,Active,CreatedAt,UpdatedAt
+admin@example.com,Farm Administrator,Administrator,TRUE,2026-11-01 08:00:00,2026-11-01 08:00:00
+collector@example.com,Field Collector,Collector,TRUE,2026-11-01 08:00:00,2026-11-01 08:00:00
+analyst@example.com,Office Analyst,Analyst,TRUE,2026-11-01 08:00:00,2026-11-01 08:00:00

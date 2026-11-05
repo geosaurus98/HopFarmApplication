@@ -1,0 +1,6 @@
+BlockVarietyID,Block,Variety,AreaHa,Active,Notes,UpdatedAt
+A1-CASCADE,A1,Cascade,7.84,TRUE,EXAMPLE ROW - replace with real area,2026-11-01 08:00:00
+C2-RIWAKA,C2,Riwaka,5.00,TRUE,EXAMPLE ROW - replace with real area,2026-11-01 08:00:00
+L2-SBH02,L2,SBH-02,4.20,TRUE,EXAMPLE ROW - replace with real area,2026-11-01 08:00:00
+H1-EXAMPLE,H1,Example,3.38,TRUE,EXAMPLE ROW - replace with real variety,2026-11-01 08:00:00
+K2-EXAMPLE,K2,Example,11.77,TRUE,EXAMPLE ROW - replace with real variety,2026-11-01 08:00:00
