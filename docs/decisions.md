@@ -1,29 +1,42 @@
 # Design Decisions and Open Questions
 
-Spec §23 lists details still to be confirmed with Nelson Lakes Hops. The build
-ships with the default below for each; every default can be changed in a few
-minutes without touching data. **Confirmed client requirements take precedence.**
+## Platform
 
-| # | Question (§23) | Default implemented | How to change |
+| Decision | Reason |
+|---|---|
+| **Offline-first web app** (installable on tablets, no app store) instead of AppSheet | The client does not use AppSheet. A web app runs on any tablet, laptop or desktop, works fully offline, and is all code, so it can be tested automatically and kept in version control. |
+| **Google Sheets as the database**, with Google Apps Script as the API | Free, familiar, and the data stays readable, filterable and downloadable as a normal spreadsheet. Suits the expected volume of tens of thousands of leaf rows per season. If it outgrows Sheets, only `apps-script/` needs replacing, for example with Supabase. |
+| No build tools or frameworks | Plain HTML, CSS and JS modules. Anyone can host the `app/` folder, and nothing goes stale. |
+| Sign-in by email + per-person access code, checked against the Users tab | Google sign-in cannot be used from a separately hosted app talking to Apps Script without extra Google Cloud setup. Codes are simple to issue and revoke. |
+| Edits are sent as **field-level patches** | Two people changing different fields of the same sample never overwrite each other. |
+| Device keeps everything it needs in IndexedDB; changes are queued in the same transaction as the save | A record cannot be saved without also being queued for upload, so nothing is lost if the app is closed or the tablet restarts (§5.5). |
+| The server recomputes block snapshot, leaf target and season | The sheet is always right even if a device has an old block list. |
+| Leaves for samples older than about 13 months are not cached on devices | Keeps tablets fast as seasons accumulate. They download on demand when a sample is opened online. Full history is always in the Sheet and the CSV exports. |
+
+## Open client questions (spec §23)
+
+The defaults below are built in. Each can be changed in a few lines.
+
+| # | Question | Default implemented | To change |
 |---|---|---|---|
-| D1 | Do count fields default to 0 or stay empty? | **Empty and required.** A leaf cannot be saved until all five counts are entered, so `0` always means "checked, none found" (§6.5). | For speed, set *Initial value* `0` on the five count columns. Trade-off: an unchecked field would then be saved as 0. |
-| D2 | Duplicate sample-number policy | **Warning only**, scoped to the same season and ignoring cancelled samples. The data-quality report also lists duplicates. | To block: add to `SampleNumber` Valid_If `AND([_THIS] > 0, COUNT(SELECT(Samples[SampleID], AND([SampleNumber] = [_THISROW].[SampleNumber], [Season] = [_THISROW].[Season], [SampleID] <> [_THISROW].[SampleID], [Status] <> "Cancelled"))) = 0)`. |
-| D3 | Can bag numbers be reused across seasons? | **Yes.** `SampleID` (UNIQUEID) is the real key; `Season` distinguishes reused bag numbers. | Remove the `[Season] = …` term from D2 to forbid reuse ever. |
-| D4 | Number of photos | **2 per sample, 1 per leaf.** | Add `SamplePhoto3` etc., or introduce a `Photos` child table (`PhotoID, ParentTable, ParentID, Photo, Caption`) for unlimited photos. |
-| D5 | Editing completed records | **Administrators only**, via the system *Edit* action condition; changes recorded in `UpdatedAt`, `LastModifiedBy` and the `AuditLog` bots. *Reopen Analysis* (admin) allows adding leaves. | Widen the *Edit* conditions in build guide §4. |
-| D6 | Early completion: mandatory reason or warning? | **Warning + optional reason** (client: "must not impose an absolute barrier"). Below-target completions are flagged in the data-quality report. | Set `EarlyCompletionReason` Required_If `[LeavesAnalysed] < [TargetLeafCount]`. |
-| D7 | Order of count fields | Spec §6.4 order: TwoSM, PP, TwoSM eggs, predator eggs, other beneficials. | Reorder the LeafAnalysis form columns. |
-| D8 | Beneficial organism categories | Ladybird (Stethorus), Ladybird (other), Lacewing, Predatory thrips, Predatory midge, Spider, Other — free text also allowed. | Edit the Enum values on `OtherBeneficialDescription`. |
-| D9 | Export formats | CSV from the app; Excel/CSV from the spreadsheet; Python script. | — |
-| D10 | Plant health methodology | Not built. Proposed data model in `data-model.md` §5. | — |
+| D1 | Do count fields default to 0 or stay empty? | **Empty, and every count is required**, so a blank can never be mistaken for zero. The **Blanks → 0** button fills the remaining empty counts with one tap. | Pre-fill `0` in `viewLeaf` (`app/js/app.js`). |
+| D2 | Duplicate sample-number policy | **Warning only**: same bag number, same season, ignoring cancelled samples. Also listed in the data-quality report. | Turn the warning into an error in `viewSampleForm`. |
+| D3 | Can bag numbers be reused across seasons? | **Yes.** Each sample has its own hidden unique ID, and the season distinguishes reused bag numbers. | — |
+| D4 | Number of photos | **2 per sample, 1 per leaf**, resized to at most 1600 px before upload. | Add `SamplePhoto3` (sheet column + form). |
+| D5 | Editing completed records | **Administrators only.** Every change to a completed sample or its leaves is written to **AuditLog** with before → after values. Admins can also **Reopen analysis**. | `can()` in `app/js/logic.js` plus `authorizeSample_` / `authorizeLeaf_` in `Api.gs`. |
+| D6 | Early completion: mandatory reason or warning? | **Warning plus an optional reason** (the client said it must not block completion). Shown in exports and the data-quality report. | Make the reason required in `viewComplete`. |
+| D7 | Order of count fields | Spec §6.4 order: TwoSM, PP, TwoSM eggs, predator eggs, other beneficials. | Reorder `COUNT_FIELDS` in `logic.js`. |
+| D8 | Beneficial organism categories | Ladybird (Stethorus), Ladybird (other), Lacewing, Predatory thrips, Predatory midge, Spider, Other (free text). | `BENEFICIAL_TYPES` in `logic.js`. |
+| D9 | Export formats | CSV (opens in Excel) from the app; Excel or CSV from the Sheet; Python script for CSV downloads. | — |
+| D10 | Plant health methodology | Not built. Proposed model in `data-model.md` §6. | — |
 
-## Other choices made during the build
+## Other choices
 
-| Topic | Decision | Reason |
-|---|---|---|
-| Season | 1 July – 30 June, labelled `2026/27`. | New Zealand hop growing season spans the calendar year end. |
-| Snapshot of block data | Block, variety, area and target are copied onto the sample and frozen once analysis starts. | Historical records must not change when reference data changes (§5.3, §11). |
-| Draft status | Present in the status list but not used by the standard flow — saving a sample makes it *Awaiting Analysis* (§5.6). | AppSheet forms save atomically; a half-filled form is simply not saved. |
-| High counts | Warning above 100 per field, never blocked. | §6.5: valid observations must not be discarded. |
-| Extra columns vs spec | `Samples.Season`, `Samples.AnalysisStartedBy`, `LastModifiedBy` on Samples and LeafAnalysis; tables `AuditLog`, `HelpReference`, `HomeMenu`. | Season filtering (§11), responsible analyst (§6.3), traceability (§14), help screen (§9.7), role-based home screen (§9.1). |
-| Leaf counting UI | AppSheet Number inputs with step buttons. | Native, works offline, numeric keypad on tablets. |
+| Topic | Decision |
+|---|---|
+| Season | 1 July – 30 June, labelled `2026/27` (the NZ hop season spans New Year). |
+| Unusually high count | A confirmation is asked above 100 for any count. The value is never blocked (§6.5). |
+| Leaf deletion | Allowed while analysis is in progress (and for admins). The row is kept in the sheet with `Deleted = TRUE` and left out of all results. Remaining leaves keep their numbers. |
+| Draft status | In the status list for completeness, but not used. Saving a sample makes it *Awaiting Analysis* (§5.6). |
+| Two devices entering the same leaf number offline | Both rows are kept (no observation is lost) and the data-quality report flags the duplicate. |
+| Extra columns beyond the spec | `Users.AccessCode`, `Samples.Season`, `Samples.AnalysisStartedBy`, `LastModifiedBy` (Samples, LeafAnalysis), `LeafAnalysis.Deleted`, plus the tabs `AuditLog` and `HelpReference`. |

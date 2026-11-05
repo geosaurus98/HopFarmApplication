@@ -4,7 +4,7 @@
 Users ──< Samples (CollectorEmail, AnalysisStartedBy, CompletedBy)
 Users ──< LeafAnalysis (AnalystEmail)
 BlockVarieties ──< Samples (BlockVarietyID)        one block/variety, many samples
-Samples ──< LeafAnalysis (SampleID, "is part of")  one sample, many leaves
+Samples ──< LeafAnalysis (SampleID)                one sample, many leaves
 ```
 
 A sample of 75 leaves = 1 `Samples` row + 75 `LeafAnalysis` rows. All summary
@@ -17,7 +17,8 @@ figures are calculated from the leaf rows; nothing is pre-aggregated.
 | UserEmail | Email, **key** | Google sign-in address |
 | UserName | Text | Displayed instead of the email |
 | Role | `Collector` / `Analyst` / `Administrator` | Drives views, actions and update permissions |
-| Active | Yes/No | Inactive users lose access to sample data; their history stays |
+| Active | TRUE/FALSE | Inactive users cannot sign in; their history stays |
+| AccessCode | Text | The code the person types to sign in (never sent to devices) |
 | CreatedAt, UpdatedAt | DateTime | |
 
 ## 2. BlockVarieties
@@ -27,29 +28,29 @@ figures are calculated from the leaf rows; nothing is pre-aggregated.
 | BlockVarietyID | Text, **key** | e.g. `A1-CASCADE`; never change once used |
 | Block, Variety | Text | Dropdown shows "A1 - Cascade" |
 | AreaHa | Decimal > 0 | Hectares |
-| Active | Yes/No | Only active rows offered for new samples |
+| Active | TRUE/FALSE | Only active rows offered for new samples |
 | Notes, UpdatedAt | | |
 
 ## 3. Samples
 
 | Column | Type | Set by | Notes |
 |---|---|---|---|
-| SampleID | Text, **key** | `UNIQUEID()` | Internal; never shown |
+| SampleID | Text, **key** | device (UUID) | Internal; never shown |
 | SampleNumber | Number | Collector | Bag label; may repeat across seasons |
 | CollectionDate | Date | default today | |
-| Season | Text | formula | `2026/27` (1 Jul – 30 Jun) |
+| Season | Text | server | `2026/27` (1 Jul – 30 Jun) |
 | CollectorEmail | Ref Users | current user | |
 | BlockVarietyID | Ref BlockVarieties | Collector | |
-| Block, Variety, AreaHaAtCollection, TargetLeafCount | snapshot | on save | Frozen once analysis starts |
+| Block, Variety, AreaHaAtCollection, TargetLeafCount | snapshot | server | Copied from the block when chosen; never changed by later block edits |
 | SampleComments, SamplePhoto1, SamplePhoto2 | | Collector | optional |
 | Status | Enum | actions | Draft · Awaiting Analysis · Analysis In Progress · Analysis Complete · Cancelled |
 | AnalysisStartedAt, AnalysisStartedBy | | *Start Analysis* | |
 | AnalysisCompletedAt, CompletedBy, ActualLeafCount | | *Complete Analysis* | |
 | AnalysisComments, EarlyCompletionReason | | Analyst at completion | |
-| CreatedAt, UpdatedAt, LastModifiedBy | | automatic | |
+| CreatedAt, UpdatedAt, LastModifiedBy | | device / server | UpdatedAt is server time and drives incremental sync |
 
 `TargetLeafCount = MAX(50, FLOOR((AreaHa × 10) / 5) × 5)` — e.g. 3.38 ha → 50,
-7.84 ha → 75, 11.77 ha → 115. Reference implementation: `tools/leaf_target.py`.
+7.84 ha → 75, 11.77 ha → 115. Implemented identically in `app/js/logic.js`, `apps-script/Setup.gs` and `tools/leaf_target.py` (all tested).
 
 ### Status transitions
 
@@ -62,13 +63,13 @@ figures are calculated from the leaf rows; nothing is pre-aggregated.
                          Cancelled <──────────────────────┘
 ```
 
-Status is never edited by hand except by an administrator.
+Status is changed only by the app's buttons; the API enforces who may make each transition.
 
 ## 4. LeafAnalysis
 
 | Column | Type | Notes |
 |---|---|---|
-| LeafAnalysisID | Text, **key** | `UNIQUEID()` |
+| LeafAnalysisID | Text, **key** | device (UUID) |
 | SampleID | Ref Samples | Required; part-of |
 | LeafNumber | Number ≥ 1 | Automatic; unique within the sample |
 | AnalystEmail, AnalysisDateTime | | Automatic |
@@ -78,20 +79,20 @@ Status is never edited by hand except by an administrator.
 | PredatorEggCount | whole number ≥ 0 | |
 | OtherBeneficialCount | whole number ≥ 0 | |
 | OtherBeneficialDescription | Enum + free text | Shown when other beneficials > 0 |
-| LeafComment, LeafPhoto | | optional |
+| LeafComment, LeafPhoto | | optional; photo is a Google Drive link |
+| Deleted | TRUE/FALSE | Deleted leaves stay in the sheet but are excluded everywhere |
 | CreatedAt, UpdatedAt, LastModifiedBy | | automatic |
 
-Uniqueness of (SampleID, LeafNumber) is enforced in the app by a Valid_If and
-re-checked by the spreadsheet data-quality report (which would also catch any
-duplicate created by two devices adding the same leaf offline at the same time).
+Leaf numbers are assigned by the app (highest existing + 1) and checked for
+uniqueness within the sample before saving. If two devices add the same leaf
+number offline, both rows are kept and the data-quality report flags them.
 
 ## 5. Supporting tables
 
 | Table | Purpose |
 |---|---|
-| AuditLog | Before/after summaries of edits to completed samples and their leaves (written by bots) |
-| HelpReference | Identification and how-to content, with optional photos |
-| HomeMenu | Role-filtered home-screen buttons |
+| AuditLog | Before → after summary of every change to a completed sample or its leaves (written by the API) |
+| HelpReference | Identification and how-to content shown in the app, with optional image links |
 
 ## 6. Future: Plant Health Monitoring (§18)
 
@@ -109,5 +110,5 @@ BlockVarieties ──< Plants ──< PlantInspections ──< PlantObservations
 | PlantObservations | ObservationID, InspectionID, Category (pest damage / disease / leaf condition / growth / general), Score or Value, Notes — keeps the assessment criteria configurable while they are still being finalised |
 
 A weekly round of 14 plants per block becomes a slice of `Plants` per block and
-a "Save and Next Plant" form-saved action, mirroring the leaf workflow. A
-`Module` column is **not** needed on existing tables.
+a "Save & next plant" screen, mirroring the leaf workflow. No changes to the
+mite tables are needed.

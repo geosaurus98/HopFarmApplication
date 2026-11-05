@@ -21,7 +21,7 @@ def leaf(sid, n, tsm, pp, e1=0, e2=0, ob=0):
             "TetranychusCount": str(tsm), "PhytoseiulusCount": str(pp), "TwoSpotEggCount": str(e1),
             "PredatorEggCount": str(e2), "OtherBeneficialCount": str(ob)}
 
-LEAVES = [leaf("s1", 10, 0, 0), leaf("s1", 2, 4, 1, 3), leaf("s1", 1, 6, 1), leaf("s2", 1, 0, 2),
+LEAVES = [dict(leaf("s1", 11, 99, 99), Deleted="TRUE"), leaf("s1", 10, 0, 0), leaf("s1", 2, 4, 1, 3), leaf("s1", 1, 6, 1), leaf("s2", 1, 0, 2),
           leaf("orphan", 1, 9, 9)]
 USERS = [{"UserEmail": "c@x.nz", "UserName": "Casey"}, {"UserEmail": "a@x.nz", "UserName": "Alex"}]
 
@@ -37,6 +37,7 @@ class FlattenTest(unittest.TestCase):
         self.assertEqual(first["Analyst"], "Alex")
         self.assertEqual(first["AreaHa"], "3.38")
         self.assertEqual(first["SampleComments"], "windy")
+        self.assertEqual(first["WeekStarting"], "2026-11-02")
         self.assertEqual(set(first), set(fe.LEAF_EXPORT_HEADERS))
 
     def test_summary(self):

@@ -6,8 +6,8 @@ Sheet as CSV, then run:
     python -m tools.flatten_export --samples Samples.csv --leaves LeafAnalysis.csv \
         --users Users.csv --out leaf_results.csv [--summary sample_summary.csv]
 
-The Apps Script "Hop Farm > Build leaf results export" menu produces the same
-columns inside the spreadsheet; this script is for offline / Python analysis.
+The app's Reports screen and the spreadsheet's "Hop Farm" menu produce the same
+columns; this script is for working from CSV downloads in Python.
 Only the standard library is used.
 """
 from __future__ import annotations
@@ -15,28 +15,42 @@ from __future__ import annotations
 import argparse
 import csv
 from collections import defaultdict
+from datetime import date, timedelta
 from pathlib import Path
 
 LEAF_EXPORT_HEADERS = [
-    "SampleID", "SampleNumber", "Season", "CollectionDate", "Collector", "Block", "Variety",
-    "AreaHa", "TargetLeafCount", "LeafNumber", "Analyst", "AnalysisDateTime",
+    "SampleID", "SampleNumber", "Season", "CollectionDate", "WeekStarting", "Collector", "Block",
+    "Variety", "AreaHa", "TargetLeafCount", "LeafNumber", "Analyst", "AnalysisDateTime",
     "TetranychusCount", "PhytoseiulusCount", "TwoSpotEggCount", "PredatorEggCount",
     "OtherBeneficialCount", "OtherBeneficialDescription", "LeafComment", "SampleComments",
     "AnalysisComments", "SampleStatus", "SamplePhoto1", "SamplePhoto2", "LeafPhoto",
 ]
 
 SUMMARY_HEADERS = [
-    "SampleID", "SampleNumber", "Season", "CollectionDate", "Block", "Variety", "Status",
-    "TargetLeafCount", "LeavesAnalysed", "BelowTarget",
+    "SampleID", "SampleNumber", "Season", "CollectionDate", "WeekStarting", "Block", "Variety",
+    "Status", "TargetLeafCount", "LeavesAnalysed", "BelowTarget",
     "TotalTwoSM", "AvgTwoSMPerLeaf", "TotalPP", "AvgPPPerLeaf",
     "TotalTwoSMEggs", "TotalPredatorEggs", "TotalOtherBeneficial",
-    "PredatorToPestRatio", "LeavesWithTwoSM", "PctLeavesWithTwoSM",
+    "PredatorToPestRatio", "LeavesWithTwoSM", "PctLeavesWithTwoSM", "EarlyCompletionReason",
 ]
 
 COUNT_FIELDS = [
     "TetranychusCount", "PhytoseiulusCount", "TwoSpotEggCount",
     "PredatorEggCount", "OtherBeneficialCount",
 ]
+
+
+def week_starting(iso_date: str) -> str:
+    """Monday of the week containing the date ('YYYY-MM-DD'); '' if unparseable."""
+    try:
+        d = date.fromisoformat(str(iso_date)[:10])
+    except ValueError:
+        return ""
+    return (d - timedelta(days=d.weekday())).isoformat()
+
+
+def is_deleted(leaf: dict) -> bool:
+    return str(leaf.get("Deleted", "")).strip().upper() == "TRUE"
 
 
 def read_csv(path: Path | str) -> list[dict[str, str]]:
@@ -68,11 +82,12 @@ def flatten(samples: list[dict], leaves: list[dict], users: list[dict] | None = 
     rows = []
     for leaf in leaves:
         s = by_id.get(leaf["SampleID"])
-        if s is None:
+        if is_deleted(leaf) or s is None or s.get("Status") == "Cancelled":
             continue  # orphan leaf: reported by the data quality check, not exported
         rows.append({
             "SampleID": s["SampleID"], "SampleNumber": s["SampleNumber"], "Season": s.get("Season", ""),
-            "CollectionDate": s["CollectionDate"], "Collector": name(s.get("CollectorEmail", "")),
+            "CollectionDate": s["CollectionDate"], "WeekStarting": week_starting(s["CollectionDate"]),
+            "Collector": name(s.get("CollectorEmail", "")),
             "Block": s["Block"], "Variety": s["Variety"], "AreaHa": s.get("AreaHaAtCollection", ""),
             "TargetLeafCount": s.get("TargetLeafCount", ""), "LeafNumber": leaf["LeafNumber"],
             "Analyst": name(leaf.get("AnalystEmail", "")), "AnalysisDateTime": leaf.get("AnalysisDateTime", ""),
@@ -90,7 +105,8 @@ def flatten(samples: list[dict], leaves: list[dict], users: list[dict] | None = 
 def summarise(samples: list[dict], leaves: list[dict]) -> list[dict]:
     grouped: dict[str, list[dict]] = defaultdict(list)
     for leaf in leaves:
-        grouped[leaf["SampleID"]].append(leaf)
+        if not is_deleted(leaf):
+            grouped[leaf["SampleID"]].append(leaf)
     out = []
     for s in samples:
         if s.get("Status") == "Cancelled":
@@ -103,7 +119,8 @@ def summarise(samples: list[dict], leaves: list[dict]) -> list[dict]:
         target = _int(s.get("TargetLeafCount"))
         out.append({
             "SampleID": s["SampleID"], "SampleNumber": s["SampleNumber"], "Season": s.get("Season", ""),
-            "CollectionDate": s["CollectionDate"], "Block": s["Block"], "Variety": s["Variety"],
+            "CollectionDate": s["CollectionDate"], "WeekStarting": week_starting(s["CollectionDate"]),
+            "Block": s["Block"], "Variety": s["Variety"],
             "Status": s.get("Status", ""), "TargetLeafCount": target, "LeavesAnalysed": n,
             "BelowTarget": "YES" if n < target else "NO",
             "TotalTwoSM": tsm, "AvgTwoSMPerLeaf": round(tsm / n, 3) if n else "",
@@ -112,6 +129,7 @@ def summarise(samples: list[dict], leaves: list[dict]) -> list[dict]:
             "TotalOtherBeneficial": tot["OtherBeneficialCount"],
             "PredatorToPestRatio": round(pp / tsm, 3) if tsm else "",
             "LeavesWithTwoSM": infested, "PctLeavesWithTwoSM": round(infested / n, 3) if n else "",
+            "EarlyCompletionReason": s.get("EarlyCompletionReason", ""),
         })
     return out
 

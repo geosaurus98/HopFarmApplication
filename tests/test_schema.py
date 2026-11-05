@@ -1,5 +1,5 @@
 """Keeps templates/*.csv headers in step with the SCHEMA in apps-script/Setup.gs,
-and the export headers in step between the Apps Script and Python versions."""
+and the export headers identical across Apps Script, the app and the Python tool."""
 import csv
 import re
 import unittest
@@ -32,6 +32,16 @@ class SchemaTest(unittest.TestCase):
     def test_export_headers_match(self):
         block = re.search(r"const LEAF_EXPORT_HEADERS = \[(.*?)\];", GS, re.S).group(1)
         self.assertEqual(js_string_array(block), fe.LEAF_EXPORT_HEADERS)
+
+    def test_summary_headers_match(self):
+        block = re.search(r"const SUMMARY_HEADERS = \[(.*?)\];", GS, re.S).group(1)
+        self.assertEqual(js_string_array(block), fe.SUMMARY_HEADERS)
+
+    def test_app_headers_match(self):
+        js = (ROOT / "app" / "js" / "logic.js").read_text()
+        for name, expected in (("LEAF_EXPORT_HEADERS", fe.LEAF_EXPORT_HEADERS), ("SUMMARY_HEADERS", fe.SUMMARY_HEADERS)):
+            block = re.search(rf"export const {name} = \[(.*?)\];", js, re.S).group(1)
+            self.assertEqual(js_string_array(block), expected, name)
 
     def test_example_block_targets(self):
         with open(ROOT / "templates" / "BlockVarieties.csv", newline="") as fh:
