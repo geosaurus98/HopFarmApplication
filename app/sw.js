@@ -1,7 +1,7 @@
 // Service worker: keeps the app itself available offline.
 // Data lives in IndexedDB; API calls (to script.google.com) are never cached here.
 // Bump CACHE when any app file changes so tablets pick up the new version.
-const CACHE = 'hopfarm-v1.0.0';
+const CACHE = 'hopfarm-v1.0.1';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
