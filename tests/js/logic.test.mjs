@@ -145,6 +145,20 @@ test('permissions by role and status', () => {
   assert.equal(L.can('Collector', 'cancelSample', ip, 'c@x'), false);
   assert.equal(L.can('Analyst', 'changeBlock', ip), false);
   assert.equal(L.can('Administrator', 'reopen', done), true);
-  assert.equal(L.can('Analyst', 'reopen', done), false);
+  // Analysts can correct completed samples for 31 days after completion.
+  const now = Date.parse('2026-11-06T00:00:00Z');
+  const recent = { ...done, AnalysisCompletedAt: '2026-10-10T00:00:00Z' };
+  const old = { ...done, AnalysisCompletedAt: '2026-10-01T00:00:00Z' };
+  assert.equal(L.can('Analyst', 'editLeaves', recent, '', now), true);
+  assert.equal(L.can('Analyst', 'reopen', recent, '', now), true);
+  assert.equal(L.can('Analyst', 'editSample', recent, '', now), true);
+  assert.equal(L.can('Analyst', 'addLeaves', recent, '', now), false); // reopen first
+  assert.equal(L.can('Analyst', 'changeBlock', recent, '', now), false);
+  assert.equal(L.can('Collector', 'editLeaves', recent, '', now), false);
+  assert.equal(L.can('Analyst', 'editLeaves', old, '', now), false);
+  assert.equal(L.can('Analyst', 'reopen', old, '', now), false);
+  assert.equal(L.can('Administrator', 'editLeaves', old, '', now), true);
+  assert.equal(L.can('Analyst', 'reopen', done), false); // no completion date
+  assert.equal(L.analystEditUntil(recent).toISOString().slice(0, 10), '2026-11-10');
   assert.equal(L.can('Collector', 'export'), false);
 });

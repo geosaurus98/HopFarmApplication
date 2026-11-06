@@ -544,7 +544,7 @@ async function viewSample(id) {
     }, 'Cancel sample'),
     can(r, 'reopen', s) && h('button', {
       class: 'btn secondary', type: 'button', onclick: async () => {
-        if (await confirmDialog('Reopen analysis?', 'The sample goes back to "Analysis In Progress" so leaves can be added or corrected. Changes to completed samples are recorded in the audit log.', { ok: 'Reopen' })) {
+        if (await confirmDialog('Reopen analysis?', 'The sample goes back to "Analysis In Progress" so more leaves can be added. Complete it again when you are done.', { ok: 'Reopen' })) {
           setSampleStatus(s, { Status: STATUS.IN_PROGRESS }, 'Analysis reopened.');
         }
       },
@@ -571,6 +571,10 @@ async function viewSample(id) {
           h('div', {}, h('strong', {}, String(p.remaining)), h('span', {}, 'remaining')),
           h('div', {}, h('strong', {}, pct(p.pct)), h('span', {}, 'complete'))),
         progressBar(p),
+        s.Status === STATUS.COMPLETE && role() === 'Analyst'
+          ? h('p', { class: 'muted small', id: 'editWindow' }, L.recentlyCompleted(s)
+            ? `You can correct this sample until ${fmtDate(L.analystEditUntil(s).toISOString().slice(0, 10))}. Tap a leaf to fix it, or reopen the analysis to add leaves. Changes are logged.`
+            : `Completed more than ${L.ANALYST_EDIT_DAYS} days ago — only an administrator can change it now.`) : null,
         s.Status === STATUS.COMPLETE && p.analysed < p.target
           ? h('p', { class: 'warning' }, `Completed below target (${p.analysed} of ${p.target})${s.EarlyCompletionReason ? ` — ${s.EarlyCompletionReason}` : ''}.`) : null,
         p.analysed > p.target ? h('p', { class: 'muted' }, `${p.analysed - p.target} more than the target — all are included in the results.`) : null),
@@ -621,10 +625,16 @@ async function viewLeaf(sampleId, leafId) {
   const s = await db.get('samples', sampleId);
   if (!s) return notFound();
   if (!can(role(), 'editLeaves', s)) {
-    toast(s.Status === STATUS.COMPLETE ? 'This analysis is complete. Ask an administrator to reopen it.' : 'You cannot record leaves for this sample.', 'bad');
+    toast(s.Status === STATUS.COMPLETE
+      ? `This sample was completed more than ${L.ANALYST_EDIT_DAYS} days ago. Ask an administrator.`
+      : 'You cannot record leaves for this sample.', 'bad');
     return go(`#/sample/${sampleId}`);
   }
   const isNew = leafId === 'new';
+  if (isNew && !can(role(), 'addLeaves', s)) {
+    toast('This analysis is complete. Tap "Reopen analysis" to add more leaves.', 'bad');
+    return go(`#/sample/${sampleId}`);
+  }
   const leaves = await db.getAll('leaves', 'SampleID', sampleId);
   const existing = isNew ? null : leaves.find((l) => l.LeafAnalysisID === leafId);
   if (!isNew && !existing) return notFound();
@@ -750,7 +760,13 @@ async function viewLeaf(sampleId, leafId) {
 
   async function removeLeaf() {
     if (!(await confirmDialog(`Delete leaf ${leafNumber}?`, 'The leaf record is removed from the results. The remaining leaves keep their numbers.', { ok: 'Delete leaf', danger: true }))) return;
-    await db.saveChanges([{ table: 'LeafAnalysis', record: existing, patch: { Deleted: true }, remove: true }]);
+    const changes = [{ table: 'LeafAnalysis', record: existing, patch: { Deleted: true }, remove: true }];
+    if (s.Status === STATUS.COMPLETE) {
+      // Keep the recorded leaf count of a completed sample correct.
+      const patch = { ActualLeafCount: L.liveLeaves(leaves).length - 1 };
+      changes.unshift({ table: 'Samples', record: { ...s, ...patch }, patch });
+    }
+    await db.saveChanges(changes);
     syncSoon();
     toast(`Leaf ${leafNumber} deleted.`);
     go(`#/sample/${sampleId}`);

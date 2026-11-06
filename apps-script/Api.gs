@@ -143,6 +143,14 @@ const WRITABLE = {
 
 const SNAPSHOT_FIELDS = ['BlockVarietyID', 'Block', 'Variety', 'AreaHaAtCollection', 'TargetLeafCount'];
 
+/** Analysts may correct a completed sample for this many days after completion (client, Nov 2026). */
+const ANALYST_EDIT_DAYS = 31;
+
+function recentlyCompleted_(s) {
+  const t = s && s.AnalysisCompletedAt instanceof Date ? s.AnalysisCompletedAt.getTime() : NaN;
+  return s && s.Status === STATUS.COMPLETE && !isNaN(t) && (Date.now() - t) <= ANALYST_EDIT_DAYS * 86400000;
+}
+
 function push_(user, ops) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -276,10 +284,13 @@ function authorizeSample_(user, before, patch) {
     }
     return;
   }
-  if (before.Status === STATUS.COMPLETE || before.Status === STATUS.CANCELLED) {
-    throw new Error('Only an administrator can change a ' + before.Status.toLowerCase() + ' sample.');
+  const labCanCorrect = isLab_(user) && recentlyCompleted_(before);
+  if (before.Status === STATUS.CANCELLED || (before.Status === STATUS.COMPLETE && !labCanCorrect)) {
+    throw new Error(before.Status === STATUS.COMPLETE
+      ? 'This sample was completed more than ' + ANALYST_EDIT_DAYS + ' days ago. Only an administrator can change it now.'
+      : 'Only an administrator can change a cancelled sample.');
   }
-  const analysisStarted = before.Status === STATUS.IN_PROGRESS;
+  const analysisStarted = before.Status === STATUS.IN_PROGRESS || before.Status === STATUS.COMPLETE;
   if (SNAPSHOT_FIELDS.some(f => f in patch) && analysisStarted) {
     throw new Error('The block cannot be changed after analysis has started.');
   }
@@ -288,6 +299,7 @@ function authorizeSample_(user, before, patch) {
     const allowed = {};
     allowed[STATUS.AWAITING + ' -> ' + STATUS.IN_PROGRESS] = isLab_(user);
     allowed[STATUS.IN_PROGRESS + ' -> ' + STATUS.COMPLETE] = isLab_(user);
+    allowed[STATUS.COMPLETE + ' -> ' + STATUS.IN_PROGRESS] = labCanCorrect; // reopen
     allowed[STATUS.DRAFT + ' -> ' + STATUS.AWAITING] = own;
     allowed[STATUS.AWAITING + ' -> ' + STATUS.CANCELLED] = own;
     allowed[STATUS.DRAFT + ' -> ' + STATUS.CANCELLED] = own;
@@ -309,9 +321,15 @@ function authorizeLeaf_(user, before, patch, samples) {
   if (isAdmin_(user)) return;
   if (!isLab_(user)) throw new Error('Only analysts can record leaf results.');
   if (before && 'SampleID' in patch && patch.SampleID !== before.SampleID) throw new Error('A leaf cannot be moved to another sample.');
-  if ([STATUS.AWAITING, STATUS.IN_PROGRESS].indexOf(sample.Status) === -1) {
-    throw new Error('Leaves can only be added or changed while the sample is being analysed (' + sample.Status + ').');
+  if ([STATUS.AWAITING, STATUS.IN_PROGRESS].indexOf(sample.Status) !== -1) return;
+  if (recentlyCompleted_(sample)) {
+    if (!before) throw new Error('This sample is complete. Reopen the analysis to add leaves.');
+    return; // correcting or deleting a leaf of a recently completed sample
   }
+  if (sample.Status === STATUS.COMPLETE) {
+    throw new Error('This sample was completed more than ' + ANALYST_EDIT_DAYS + ' days ago. Only an administrator can change its leaves now.');
+  }
+  throw new Error('Leaves can only be added or changed while the sample is being analysed (' + sample.Status + ').');
 }
 
 function finaliseSample_(rec, before, patch, blocks, user) {

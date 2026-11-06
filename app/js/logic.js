@@ -298,23 +298,40 @@ export function trendPoints(samples, leavesBySample, blockVarietyId, measure, se
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/** Analysts may correct a completed sample for this many days after completion. */
+export const ANALYST_EDIT_DAYS = 31;
+
+/** Completed within the analyst correction window. */
+export function recentlyCompleted(sample, now = Date.now()) {
+  const t = new Date(sample?.AnalysisCompletedAt || NaN).getTime();
+  return sample?.Status === STATUS.COMPLETE && Number.isFinite(t) && now - t <= ANALYST_EDIT_DAYS * 86400000;
+}
+
+/** Date after which analysts can no longer correct this completed sample. */
+export function analystEditUntil(sample) {
+  const t = new Date(sample?.AnalysisCompletedAt || NaN).getTime();
+  return Number.isFinite(t) ? new Date(t + ANALYST_EDIT_DAYS * 86400000) : null;
+}
+
 /** Can this role perform this action on this sample? */
-export function can(role, action, sample = {}, userEmail = '') {
+export function can(role, action, sample = {}, userEmail = '', now = Date.now()) {
   const admin = role === 'Administrator';
   const lab = admin || role === 'Analyst';
+  const correctable = lab && recentlyCompleted(sample, now);
   const own = String(sample.CollectorEmail || '').toLowerCase() === String(userEmail).toLowerCase();
   switch (action) {
     case 'createSample': return ROLES.includes(role);
     case 'editSample': return admin || ([STATUS.DRAFT, STATUS.AWAITING].includes(sample.Status) && (own || lab)) ||
-      (lab && sample.Status === STATUS.IN_PROGRESS);
+      (lab && sample.Status === STATUS.IN_PROGRESS) || correctable;
     case 'changeBlock': return admin || [STATUS.DRAFT, STATUS.AWAITING].includes(sample.Status);
     case 'startAnalysis': return lab && sample.Status === STATUS.AWAITING;
     case 'resumeAnalysis': return lab && sample.Status === STATUS.IN_PROGRESS;
     case 'completeAnalysis': return lab && sample.Status === STATUS.IN_PROGRESS;
-    case 'editLeaves': return admin || (lab && [STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status));
+    case 'editLeaves': return admin || (lab && [STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status)) || correctable;
+    case 'addLeaves': return lab && [STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status);
     case 'cancelSample': return (admin && [STATUS.DRAFT, STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status)) ||
       (own && [STATUS.DRAFT, STATUS.AWAITING].includes(sample.Status));
-    case 'reopen': return admin && sample.Status === STATUS.COMPLETE;
+    case 'reopen': return sample.Status === STATUS.COMPLETE && (admin || correctable);
     case 'restore': return admin && sample.Status === STATUS.CANCELLED;
     case 'analyse': return lab;
     case 'export': return lab;

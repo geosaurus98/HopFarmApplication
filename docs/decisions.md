@@ -23,7 +23,7 @@
 | One analyst per sample? | One person takes responsibility; record one person | Records who started and who completed. Each leaf also records who entered it |
 | Photo limit | Max 2 per sample; leaf photos are nice to have | 2 per sample, 1 per leaf |
 | Searchable by year | Yes | Season filter (1 Jul – 30 Jun) on every list and export |
-| Completed samples editable? | Editable for now | Administrators can edit any completed sample (audited), or reopen it. See D5 |
+| Completed samples editable? | Editable for now; analysts for samples completed in the last month | Analysts: 31 days after completion. Administrators: any time. All changes are audited. See D5 |
 | Fewer leaves than target | Warning only; can still proceed | Warning plus optional reason; never blocks |
 | Extra leaves | No problem measuring extras | Unlimited |
 | Reports | Collect a year of data first; start with a simple bar graph per sample for week-to-week comparison | Per-sample bar chart, plus week-by-week bar charts per block for each count. CSV for Excel |
@@ -42,7 +42,7 @@ The defaults below are built in. Each can be changed in a few lines.
 | D2 | Duplicate sample-number policy | **Warning only**: same bag number, same season, ignoring cancelled samples. Also listed in the data-quality report. | Turn the warning into an error in `viewSampleForm`. |
 | D3 | Can bag numbers be reused across seasons? | **Yes.** Each sample has its own hidden unique ID, and the season distinguishes reused bag numbers. | — |
 | D4 | Number of photos | **Confirmed:** 2 per sample, 1 per leaf, resized to at most 1600 px before upload. | Add `SamplePhoto3` (sheet column + form). |
-| D5 | Editing completed records | **Administrators only.** Every change to a completed sample or its leaves is written to **AuditLog** with before → after values. Admins can also **Reopen analysis**. | `can()` in `app/js/logic.js` plus `authorizeSample_` / `authorizeLeaf_` in `Api.gs`. |
+| D5 | Editing completed records | **Confirmed:** for **31 days after completion**, analysts can correct leaf counts, delete leaves, edit the sample's details and reopen the analysis to add leaves. After that only administrators can. The block cannot be changed once analysis starts. Every change to a completed sample goes to **AuditLog** (before → after). | `ANALYST_EDIT_DAYS` in `logic.js` and `Api.gs`. |
 | D6 | Early completion: mandatory reason or warning? | **Confirmed: warning only**, with an optional reason (the client said it must not block completion). Shown in exports and the data-quality report. | Make the reason required in `viewComplete`. |
 | D7 | Order of count fields | **Confirmed by Jason:** PP, 2SM, PP eggs, 2SM eggs, Beneficials. | `COUNT_FIELDS` in `logic.js`. |
 | D8 | Beneficial organism categories | Ladybird (Stethorus), Ladybird (other), Lacewing, Predatory thrips, Predatory midge, Spider, Other (free text). | `BENEFICIAL_TYPES` in `logic.js`. |
@@ -55,6 +55,7 @@ The defaults below are built in. Each can be changed in a few lines.
 |---|---|
 | Season | 1 July – 30 June, labelled `2026/27` (the NZ hop season spans New Year). |
 | Unusually high count | A confirmation is asked above 100 for any count. The value is never blocked (§6.5). |
+| Minimum 50 leaves | **Confirmed** for every block, including very small ones (e.g. L2 Comet NZ, 0.04 ha). |
 | Managing administrators | Admins can add users (including new admins) and edit Collectors and Analysts. Other admins are view-only, so one admin can't lock out or take over another. An admin can change their own name, username and code, but not their own role or access. Changes to admins are made by the spreadsheet owner in the Users tab. |
 | Leaf deletion | Allowed while analysis is in progress (and for admins). The row is kept in the sheet with `Deleted = TRUE` and left out of all results. Remaining leaves keep their numbers. |
 | Draft status | In the status list for completeness, but not used. Saving a sample makes it *Awaiting Analysis* (§5.6). |

@@ -204,17 +204,43 @@ test('full analysis workflow, completion below target, export one row per leaf',
   assert.equal(s.Status, 'Analysis Complete');
   assert.equal(s.ActualLeafCount, 3);
 
-  // Analysts cannot change a completed sample or its leaves; admins can, and it is audited.
-  let r = push(g, LAB, [{ table: 'LeafAnalysis', id: 'leaf-00001', patch: { TetranychusCount: 9 } }]);
-  assert.match(r.results[0].error, /being analysed/);
-  r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { AnalysisComments: 'x' } }]);
-  assert.match(r.results[0].error, /administrator/);
+  // Within 31 days of completion an analyst can correct leaves and sample details (audited),
+  // but must reopen the analysis to add leaves.
+  let r = push(g, LAB, [{ table: 'LeafAnalysis', id: 'leaf-00002', patch: { PhytoseiulusCount: 2 } }]);
+  assert.equal(r.results[0].ok, true, r.results[0].error);
+  r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { AnalysisComments: 'Recounted leaf 2' } }]);
+  assert.equal(r.results[0].ok, true, r.results[0].error);
+  r = push(g, LAB, [newLeaf('leaf-00009', 'sample-0001', 9)]);
+  assert.match(r.results[0].error, /Reopen the analysis to add leaves/);
+  r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { BlockVarietyID: 'K2-RIWAKA' } }]);
+  assert.match(r.results[0].error, /block cannot be changed/);
+  r = push(g, COL, [{ table: 'Samples', id: 'sample-0001', patch: { SampleComments: 'x' } }]);
+  assert.equal(r.results[0].ok, false, 'collectors cannot correct completed samples');
+  let audit = g.table('AuditLog');
+  assert.equal(audit.length, 2);
+  assert.equal(audit[0].ChangedBy, 'lab@farm.nz');
+  assert.match(audit[0].Summary, /PhytoseiulusCount: 1 → 2/);
+
+  // After 31 days only an administrator can change it.
+  const doneCol = g.sheets.Samples.data[0].indexOf('AnalysisCompletedAt');
+  g.sheets.Samples.data[1][doneCol] = new Date(Date.now() - 32 * 86400000);
+  r = push(g, LAB, [{ table: 'LeafAnalysis', id: 'leaf-00001', patch: { TetranychusCount: 9 } }]);
+  assert.match(r.results[0].error, /more than 31 days ago/);
+  r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis In Progress' } }]);
+  assert.match(r.results[0].error, /more than 31 days ago/);
   r = push(g, ADMIN, [{ table: 'LeafAnalysis', id: 'leaf-00001', patch: { TetranychusCount: 9 } }]);
   assert.equal(r.results[0].ok, true);
-  const audit = g.table('AuditLog');
-  assert.equal(audit.length, 1);
-  assert.equal(audit[0].ChangedBy, 'admin@farm.nz');
-  assert.match(audit[0].Summary, /TetranychusCount: 1 → 9/);
+  audit = g.table('AuditLog');
+  assert.equal(audit.length, 3);
+  assert.equal(audit[2].ChangedBy, 'admin@farm.nz');
+  assert.match(audit[2].Summary, /TetranychusCount: 1 → 9/);
+
+  // Reopening within the window works for analysts.
+  g.sheets.Samples.data[1][doneCol] = new Date();
+  r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis In Progress' } }]);
+  assert.equal(r.results[0].ok, true, r.results[0].error);
+  r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis Complete', ActualLeafCount: 3 } }]);
+  assert.equal(r.results[0].ok, true, r.results[0].error);
 
   const exp = g.post({ action: 'export', ...LAB, type: 'leaves' });
   const lines = exp.csv.trim().split('\r\n');
