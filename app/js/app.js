@@ -421,7 +421,7 @@ async function viewSampleList(tab) {
     countEl.textContent = `${rows.length} sample${rows.length === 1 ? '' : 's'}`;
     const shown = rows.slice(0, limit);
     const counts = await Promise.all(shown.map((s) => db.countBy('leaves', 'SampleID', s.SampleID)));
-    listEl.replaceChildren(
+    mount(listEl,
       ...shown.map((s, i) => h('a', { class: 'sample-card', href: `#/sample/${s.SampleID}` },
         h('div', { class: 'bag' }, h('span', { class: 'muted small' }, 'Bag'), h('strong', {}, String(s.SampleNumber))),
         h('div', { class: 'grow' },

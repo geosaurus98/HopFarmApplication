@@ -43,6 +43,8 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.waitForSelector('#email');
     await page.fill('#email', 'col@farm.nz');
     await page.fill('#code', '999999');
+    assert.match(await page.inputValue('#apiUrl'), /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/, 'farm server is the default');
+    await page.click('summary:has-text("Server address")');
     await page.fill('#apiUrl', '/api');
     await page.click('button:has-text("Sign in")');
     await page.waitForSelector('text=not recognised');
@@ -105,6 +107,8 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     // ---- Stage 2: office analysis (analyst) ----
     await signIn('lab@farm.nz', '333333');
     await page.click('text=Analyse Samples');
+    await page.waitForSelector('.sample-card:has-text("1042")');
+    assert.doesNotMatch(await page.textContent('main'), /\bnull\b|\bundefined\b/, 'no stray null/undefined text');
     await page.click('.sample-card:has-text("1042")');
     await page.click('button:has-text("Start analysis")');
     await page.waitForSelector('#leafNumber:has-text("1")');
