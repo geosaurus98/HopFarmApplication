@@ -212,6 +212,8 @@ td.nonzero { font-weight: 700; }
 .help-item { border-bottom: 1px solid var(--line); padding: .25rem 0; }
 .help-item p { margin: .25rem 0 .75rem; }
 .help-img { max-width: 100%; border-radius: 8px; }
+.help-poster { display: block; width: 100%; max-width: 760px; margin: 0 auto; border-radius: 8px; border: 1px solid var(--line); }
+.update-banner { display: flex; align-items: center; justify-content: center; gap: 1rem; flex-wrap: wrap; padding: .5rem 1rem; background: var(--blue-bg); color: var(--blue); font-weight: 650; }
 .error-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .5rem 0; border-bottom: 1px solid var(--line); }
 
 /* Dialog and toast */

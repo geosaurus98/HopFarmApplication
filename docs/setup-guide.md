@@ -72,8 +72,17 @@ variety:
 - To remove someone's access, set `Active` to `FALSE` or change their code.
 
 **HelpReference**: starter identification and how-to text is already filled in.
-Edit it to match the farm's own posters. To add a picture, put an `https://` image
-link in `Image`.
+Edit it to match the farm's own posters. The "Mite control in hops" poster is
+built into the app's Help screen and works offline.
+
+To add a picture to a help item:
+1. Upload the photo to Google Drive.
+2. Right-click it, choose **Share**, and set General access to **Anyone with the
+   link**.
+3. Copy the link and paste it into the `Image` cell.
+
+Drive pictures need internet to show; the built-in poster does not. To replace
+the poster, swap `app/help/mite-control-poster.webp` and publish the app again.
 
 ## 3. Publish the API (3 min)
 

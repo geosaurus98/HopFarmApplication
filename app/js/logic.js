@@ -67,6 +67,17 @@ export function localDateTime(iso) {
   return `${todayLocal(d)} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
+/**
+ * Image link from the HelpReference sheet. Google Drive share links
+ * (file must be shared "Anyone with the link") are turned into a direct image link.
+ */
+export function helpImageUrl(link) {
+  const s = String(link || '').trim();
+  if (!/^https:\/\//.test(s)) return '';
+  const m = /drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=)([\w-]{10,})/.exec(s);
+  return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1200` : s;
+}
+
 export function uuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {

@@ -1,10 +1,10 @@
 // Service worker: keeps the app itself available offline.
 // Data lives in IndexedDB; API calls (to script.google.com) are never cached here.
 // Bump CACHE when any app file changes so tablets pick up the new version.
-const CACHE = 'hopfarm-v1.0.4';
+const CACHE = 'hopfarm-v1.0.5';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
-  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
+  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'help/mite-control-poster.webp',
   'js/app.js', 'js/db.js', 'js/logic.js', 'js/sync.js', 'js/ui.js', 'js/config.js',
 ];
 
@@ -21,6 +21,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.searchParams.has('check')) return; // version checks always go to the network, uncached
   // Network first (so updates arrive when online), falling back to the cache offline.
   e.respondWith(
     fetch(e.request)

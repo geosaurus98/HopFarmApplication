@@ -250,9 +250,19 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.waitForSelector('#syncBadge:has-text("All synced")', { timeout: 15000 });
     assert.equal(g.table('Samples').find((s) => s.SampleNumber === 1042).Status, 'Analysis In Progress');
 
+    // Help shows the identification poster, also offline.
+    await page.goto(`${url}/#/help`);
+    await page.waitForFunction(() => document.querySelector('.help-poster')?.naturalWidth > 0);
+
+    // A newer published version offers a one-tap update.
+    await page.route('**/js/config.js?check=*', (route) => route.fulfill({ contentType: 'text/javascript', body: "export const APP_VERSION = '99.0.0';" }));
+    await page.reload();
+    await page.waitForSelector('#updateBanner:has-text("99.0.0")');
+    await page.unroute('**/js/config.js?check=*');
+
     // Phone-sized screen has no horizontal scroll on the main screens.
     await page.setViewportSize({ width: 390, height: 800 });
-    for (const hash of ['#/', '#/new', '#/samples/all', `#/sample/${done.SampleID}`, `#/leaf/${done.SampleID}/new`, '#/reports']) {
+    for (const hash of ['#/', '#/new', '#/help', '#/samples/all', `#/sample/${done.SampleID}`, `#/leaf/${done.SampleID}/new`, '#/reports']) {
       await page.goto(`${url}/${hash}`);
       await page.waitForTimeout(300);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

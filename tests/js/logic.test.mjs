@@ -122,6 +122,14 @@ test('trend points: per sample, sorted by date, filtered by block and season', (
   assert.equal(L.trendPoints(samples, leaves, 'A1', 'AvgTwoSMPerLeaf').length, 3);
 });
 
+test('help image links: Drive share links become direct images', () => {
+  assert.equal(L.helpImageUrl('https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view?usp=sharing'), 'https://drive.google.com/thumbnail?id=1AbCdEfGhIjKlMnOp&sz=w1200');
+  assert.equal(L.helpImageUrl('https://drive.google.com/open?id=1AbCdEfGhIjKlMnOp'), 'https://drive.google.com/thumbnail?id=1AbCdEfGhIjKlMnOp&sz=w1200');
+  assert.equal(L.helpImageUrl('https://example.com/mite.jpg'), 'https://example.com/mite.jpg');
+  assert.equal(L.helpImageUrl('http://insecure.example/x.jpg'), '');
+  assert.equal(L.helpImageUrl(''), '');
+});
+
 test('permissions by role and status', () => {
   const aw = { Status: 'Awaiting Analysis', CollectorEmail: 'c@x' };
   const ip = { Status: 'Analysis In Progress', CollectorEmail: 'c@x' };

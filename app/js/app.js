@@ -28,6 +28,7 @@ async function boot() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+  watchForUpdates();
   // Ask the browser not to evict our data under storage pressure.
   navigator.storage?.persist?.().catch(() => {});
 
@@ -67,6 +68,40 @@ function renderSyncBadge(st) {
   el.replaceChildren(h('span', { class: `dot ${st.online ? 'on' : 'off'}` }), st.online ? '' : 'Offline · ', text);
   const banner = document.getElementById('offlineBanner');
   if (banner) banner.hidden = st.online;
+}
+
+/**
+ * An open tab keeps running the version it started with. Check the published
+ * version when the app starts, comes back into view or comes online, and offer
+ * a one-tap reload when it has changed.
+ */
+function watchForUpdates() {
+  const check = async () => {
+    if (!navigator.onLine) return;
+    try {
+      const res = await fetch(`js/config.js?check=${Date.now()}`, { cache: 'no-store' });
+      const m = /APP_VERSION\s*=\s*'([^']+)'/.exec(await res.text());
+      if (m && m[1] !== APP_VERSION) showUpdateBanner(m[1]);
+    } catch (e) { /* offline or host unreachable: try again later */ }
+  };
+  check();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  window.addEventListener('online', check);
+  setInterval(check, 30 * 60 * 1000);
+}
+
+function showUpdateBanner(version) {
+  if (document.getElementById('updateBanner')) return;
+  const reload = async () => {
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      await reg?.update();
+    } catch (e) { /* reload anyway */ }
+    location.reload();
+  };
+  document.getElementById('header').after(h('div', { id: 'updateBanner', class: 'update-banner' },
+    h('span', {}, `A new version of the app is available (${version}).`),
+    h('button', { class: 'btn primary small', type: 'button', onclick: reload }, 'Update now')));
 }
 
 function showAuthBanner() {
@@ -918,12 +953,17 @@ async function viewHelp() {
   const groups = L.groupBy(items, 'Category');
   mount(main(),
     h('div', { class: 'page-head' }, h('h1', {}, 'Help and Reference')),
+    h('section', { class: 'card' },
+      h('h2', {}, 'Mite control in hops — identification poster'),
+      h('p', { class: 'muted small' }, 'Tap the poster to open it full size and zoom in.'),
+      h('a', { href: 'help/mite-control-poster.webp', target: '_blank', rel: 'noopener' },
+        h('img', { class: 'help-poster', src: 'help/mite-control-poster.webp', alt: 'Mite control in hops poster: the plant damage, the pest two-spotted spider mite (badies), the predatory mite Phytoseiulus persimilis (goodies), and other beneficials — ladybird, predatory thrips and lacewing.' }))),
     items.length ? [...groups].map(([cat, rows]) => h('section', { class: 'card' },
       h('h2', {}, cat),
       rows.map((r) => h('details', { class: 'help-item' },
         h('summary', {}, r.Title),
         h('p', {}, r.Description),
-        r.Image && /^https:\/\//.test(r.Image) ? h('img', { class: 'help-img', src: r.Image, alt: r.Title, loading: 'lazy' }) : null))))
+        L.helpImageUrl(r.Image) ? h('img', { class: 'help-img', src: L.helpImageUrl(r.Image), alt: r.Title, loading: 'lazy' }) : null))))
       : h('p', { class: 'muted' }, 'Help content downloads on the next sync.'));
 }
 
