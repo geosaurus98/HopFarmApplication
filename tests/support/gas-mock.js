@@ -84,10 +84,12 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz' } = {}) {
       base64Decode: (b64) => Array.from(Buffer.from(b64, 'base64')),
       newBlob: (bytes, type, name) => ({ bytes, type, name }),
       formatDate: (d, zone, fmt) => {
-        const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' })
+        const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
           .formatToParts(d).map((p) => [p.type, p.value]));
-        if (fmt !== 'yyyy-MM-dd') throw new Error(`mock formatDate: unsupported format ${fmt}`);
-        return `${parts.year}-${parts.month}-${parts.day}`;
+        const date = `${parts.year}-${parts.month}-${parts.day}`;
+        if (fmt === 'yyyy-MM-dd') return date;
+        if (fmt === 'yyyy-MM-dd HH:mm:ss') return `${date} ${parts.hour}:${parts.minute}:${parts.second}`;
+        throw new Error(`mock formatDate: unsupported format ${fmt}`);
       },
     },
   };

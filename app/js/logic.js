@@ -58,6 +58,15 @@ export function todayLocal(now = new Date()) {
   return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
 }
 
+/** Device-local 'YYYY-MM-DD HH:MM:SS' from an ISO timestamp — Excel reads this as a date and time. */
+export function localDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${todayLocal(d)} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 export function uuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -212,7 +221,7 @@ export function leafExportRows(samples, leaves, nameOf = (e) => e) {
     .map(([s, l]) => [
       s.SampleID, s.SampleNumber, s.Season || seasonOf(s.CollectionDate), s.CollectionDate, weekStarting(s.CollectionDate),
       nameOf(s.CollectorEmail), s.Block, s.Variety, s.AreaHaAtCollection, s.TargetLeafCount, l.LeafNumber,
-      nameOf(l.AnalystEmail), l.AnalysisDateTime, l.TetranychusCount, l.PhytoseiulusCount, l.TwoSpotEggCount,
+      nameOf(l.AnalystEmail), localDateTime(l.AnalysisDateTime), l.TetranychusCount, l.PhytoseiulusCount, l.TwoSpotEggCount,
       l.PredatorEggCount, l.OtherBeneficialCount, l.OtherBeneficialDescription, l.LeafComment, s.SampleComments,
       s.AnalysisComments, s.Status, photoRef(s.SamplePhoto1), photoRef(s.SamplePhoto2), photoRef(l.LeafPhoto),
     ]);

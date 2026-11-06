@@ -182,6 +182,8 @@ test('full analysis workflow, completion below target, export one row per leaf',
   assert.equal(lines.length, 4);
   assert.equal(lines[0], g.gs.LEAF_EXPORT_HEADERS.join(','));
   assert.match(lines[1], /^sample-0001,1042,2026\/27,2026-11-03,2026-11-02,Cole Collector,A1,Cascade,7.84,75,1,Lee Analyst,/);
+  // AnalysisDateTime 2026-11-04T01:00Z is 14:00 NZDT, written so Excel reads it as a date-time.
+  assert.match(lines[1], /,Lee Analyst,2026-11-04 14:00:00,/);
   assert.match(exp.filename, /^hopfarm_leaf_results_all-seasons_\d{4}-\d{2}-\d{2}\.csv$/);
 
   const sum = g.post({ action: 'export', ...LAB, type: 'summary', season: '2026/27' });

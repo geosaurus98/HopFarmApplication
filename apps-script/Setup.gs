@@ -332,6 +332,12 @@ function deserializeValue_(col, v) {
   return v;
 }
 
+/** Farm-local 'yyyy-MM-dd HH:mm:ss' — Excel reads this as a date and time. */
+function localDateTime_(v) {
+  const d = v instanceof Date ? v : (v ? new Date(v) : null);
+  return d && !isNaN(d.getTime()) ? Utilities.formatDate(d, tz_(), 'yyyy-MM-dd HH:mm:ss') : '';
+}
+
 function isoDate_(v) {
   return v instanceof Date ? Utilities.formatDate(v, tz_(), 'yyyy-MM-dd') : String(v || '').slice(0, 10);
 }
@@ -394,7 +400,7 @@ function leafExportRows_(filter) {
       return [
         s.SampleID, s.SampleNumber, s.Season, d, weekStarting(d), nameOf_(names, s.CollectorEmail),
         s.Block, s.Variety, s.AreaHaAtCollection, s.TargetLeafCount, l.LeafNumber,
-        nameOf_(names, l.AnalystEmail), serializeValue_('AnalysisDateTime', l.AnalysisDateTime),
+        nameOf_(names, l.AnalystEmail), localDateTime_(l.AnalysisDateTime),
         l.TetranychusCount, l.PhytoseiulusCount, l.TwoSpotEggCount, l.PredatorEggCount,
         l.OtherBeneficialCount, l.OtherBeneficialDescription, l.LeafComment, s.SampleComments,
         s.AnalysisComments, s.Status, s.SamplePhoto1, s.SamplePhoto2, l.LeafPhoto

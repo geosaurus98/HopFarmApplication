@@ -20,6 +20,8 @@ test('season and week', () => {
   assert.equal(L.weekStarting('2026-11-05'), '2026-11-02');
   assert.equal(L.weekStarting('2027-01-01'), '2026-12-28');
   assert.equal(L.todayLocal(new Date(2026, 0, 9)), '2026-01-09');
+  assert.equal(L.localDateTime(new Date(2026, 10, 6, 14, 49, 22).toISOString()), '2026-11-06 14:49:22');
+  assert.equal(L.localDateTime(''), '');
 });
 
 test('nextLeafNumber uses highest existing + 1 and ignores deleted leaves', () => {
