@@ -119,13 +119,19 @@ const routes = [
   [/^#\/complete\/([\w-]+)$/, viewComplete],
   [/^#\/reports$/, viewReports],
   [/^#\/help$/, viewHelp],
+  [/^#\/users$/, viewUsers],
+  [/^#\/user\/([^/]+)$/, (id) => viewUserForm(decodeURIComponent(id))],
   [/^#\/sync$/, viewSync],
 ];
 
 // Renders run one after another, so a slow screen can never overwrite a newer one.
 let renderChain = Promise.resolve();
+let renderQueued = false;
 function render() {
-  renderChain = renderChain.then(renderNow, renderNow);
+  if (renderQueued) return renderChain; // one pending render already covers this request
+  renderQueued = true;
+  const run = () => { renderQueued = false; return renderNow(); };
+  renderChain = renderChain.then(run, run);
   return renderChain;
 }
 
@@ -154,6 +160,8 @@ async function renderNow() {
 // Sign in
 // ---------------------------------------------------------------------------
 async function viewLogin() {
+  // Never redraw over a sign-in form that is already showing: it would wipe what was typed.
+  if (main().querySelector('form #login')) return;
   const saved = (await db.getMeta('lastLogin')) || {};
   const apiUrl = h('input', { id: 'apiUrl', type: 'text', inputmode: 'url', spellcheck: false, value: saved.apiUrl || DEFAULT_API_URL, placeholder: 'https://script.google.com/macros/s/…/exec', autocomplete: 'off' });
   const login = h('input', {
@@ -228,6 +236,7 @@ async function viewHome() {
       tile('#/samples/completed', 'Completed Samples', 'Search historical results', count(STATUS.COMPLETE)),
       tile('#/reports', 'Reports and Exports', 'Trends and CSV files for Excel'),
       tile('#/help', 'Help and Reference', 'Identification guide and how-to'),
+      can(role(), 'admin') && tile('#/users', 'Manage Users', 'Add collectors, analysts and administrators'),
       can(role(), 'admin') && tile('#/samples/all', 'All Samples (admin)', 'Including cancelled samples', samples.length)));
 }
 
@@ -965,6 +974,128 @@ async function viewHelp() {
         h('p', {}, r.Description),
         L.helpImageUrl(r.Image) ? h('img', { class: 'help-img', src: L.helpImageUrl(r.Image), alt: r.Title, loading: 'lazy' }) : null))))
       : h('p', { class: 'muted' }, 'Help content downloads on the next sync.'));
+}
+
+// ---------------------------------------------------------------------------
+// User management (administrators). Needs a connection: changes go straight
+// to the Users tab so the new person can sign in immediately.
+// ---------------------------------------------------------------------------
+function needsAdminOnline(title) {
+  if (!can(role(), 'admin')) { go('#/'); return true; }
+  if (!navigator.onLine) {
+    mount(main(), h('div', { class: 'page-head' }, h('h1', {}, title)),
+      h('div', { class: 'card' }, h('p', {}, 'Managing users needs an internet connection.'), h('a', { class: 'btn secondary', href: '#/' }, 'Home')));
+    return true;
+  }
+  return false;
+}
+
+async function viewUsers() {
+  if (needsAdminOnline('Manage Users')) return;
+  mount(main(), h('p', { class: 'muted center' }, 'Loading users…'));
+  const { users } = await api('listUsers');
+  await db.replaceAll('users', users.map(({ AccessCode, ...pub }) => pub));
+  const order = { Administrator: 0, Analyst: 1, Collector: 2 };
+  users.sort((a, b) => (b.Active - a.Active) || (order[a.Role] - order[b.Role]) || displayName(a).localeCompare(displayName(b)));
+  mount(main(),
+    h('div', { class: 'page-head' }, h('h1', {}, 'Manage Users'),
+      h('a', { class: 'btn primary', href: '#/user/new' }, '+ Add user')),
+    h('p', { class: 'muted' }, 'People sign in with their username and access code. Tap a person to change their details, role or code, or to remove their access.'),
+    h('div', { class: 'list' }, users.map((u) => h('a', { class: `sample-card${u.Active ? '' : ' inactive'}`, href: `#/user/${encodeURIComponent(u.UserEmail)}` },
+      h('div', { class: 'grow' },
+        h('div', { class: 'title' }, displayName(u)),
+        h('div', { class: 'muted small' }, `${u.Username || '(no username)'} · ${u.UserEmail}`)),
+      h('div', { class: 'right' },
+        h('span', { class: `pill ${u.Active ? 'role' : 'cancelled'}` }, u.Active ? u.Role : `${u.Role} — no access`))))));
+}
+
+async function viewUserForm(id) {
+  const isNew = id === 'new';
+  if (needsAdminOnline(isNew ? 'Add user' : 'Edit user')) return;
+  let u = { UserEmail: '', Username: '', FullName: '', Role: 'Collector', Active: true, AccessCode: '' };
+  if (!isNew) {
+    const { users } = await api('listUsers');
+    u = users.find((x) => x.UserEmail.toLowerCase() === id.toLowerCase());
+    if (!u) return notFound();
+  }
+  const isSelf = !isNew && u.UserEmail.toLowerCase() === me().toLowerCase();
+  const fullName = h('input', { id: 'FullName', type: 'text', value: u.FullName || '', autocomplete: 'off' });
+  const username = h('input', { id: 'Username', type: 'text', value: u.Username || '', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: false });
+  const email = h('input', { id: 'UserEmail', type: 'email', value: u.UserEmail, disabled: !isNew, autocomplete: 'off' });
+  const roleSel = h('select', { id: 'Role', disabled: isSelf }, L.ROLES.map((r) => h('option', { value: r, selected: u.Role === r }, r)));
+  const active = h('input', { id: 'Active', type: 'checkbox', checked: !!u.Active, disabled: isSelf, class: 'checkbox' });
+  const code = h('input', { id: 'AccessCode', type: 'text', inputmode: 'numeric', value: u.AccessCode || '', placeholder: isNew ? 'Leave blank to generate one' : '', autocomplete: 'off' });
+  const msg = h('p', { class: 'error', role: 'alert' });
+  const saveBtn = h('button', { class: 'btn primary big', type: 'submit' }, isNew ? 'Add user' : 'Save changes');
+  const roleHelp = {
+    Collector: 'Records samples in the field. Cannot enter leaf counts or export.',
+    Analyst: 'Records samples, analyses leaves, completes samples and exports data.',
+    Administrator: 'Everything, including managing users and correcting completed samples.',
+  };
+  const roleHint = h('div', { class: 'hint' }, roleHelp[u.Role]);
+  roleSel.addEventListener('change', () => { roleHint.textContent = roleHelp[roleSel.value]; });
+
+  // Suggest a username from the name or email while adding someone.
+  let usernameTouched = !isNew;
+  username.addEventListener('input', () => { usernameTouched = true; });
+  const suggest = () => {
+    if (usernameTouched) return;
+    const base = (fullName.value.trim().split(/\s+/)[0] || email.value.split('@')[0] || '').toLowerCase().replace(/[^a-z0-9._-]+/g, '');
+    username.value = base;
+  };
+  fullName.addEventListener('input', suggest);
+  email.addEventListener('input', suggest);
+
+  async function submit(e) {
+    e.preventDefault();
+    msg.textContent = '';
+    saveBtn.disabled = true;
+    try {
+      const { user } = await api('saveUser', {
+        isNew,
+        user: {
+          UserEmail: email.value.trim(), Username: username.value.trim(), FullName: fullName.value.trim(),
+          Role: roleSel.value, Active: active.checked, AccessCode: code.value.trim(),
+        },
+      });
+      const { AccessCode, ...pub } = user;
+      await db.put('users', pub);
+      mount(main(), h('div', { class: 'card center' },
+        h('div', { class: 'big-tick' }, '✓'),
+        h('h1', {}, isNew ? `${displayName(user)} added` : 'Changes saved'),
+        user.Active ? h('div', { class: 'credentials' },
+          h('p', {}, 'Give them these details to sign in:'),
+          h('div', { class: 'kv' }, h('span', {}, 'App address'), h('strong', { class: 'break' }, location.origin + location.pathname)),
+          h('div', { class: 'kv' }, h('span', {}, 'Username'), h('strong', { id: 'newUsername' }, user.Username)),
+          h('div', { class: 'kv' }, h('span', {}, 'Access code'), h('strong', { id: 'newCode' }, user.AccessCode)))
+          : h('p', {}, `${displayName(user)} can no longer sign in.`),
+        h('div', { class: 'row center wrap' },
+          h('a', { class: 'btn secondary big', href: '#/users' }, 'Back to users'),
+          h('a', { class: 'btn primary big', href: '#/user/new', onclick: (ev) => { if (location.hash === '#/user/new') { ev.preventDefault(); render(); } } }, 'Add another'))));
+    } catch (err) {
+      msg.textContent = err instanceof OfflineError ? 'No connection. Try again when online.' : err.message;
+      saveBtn.disabled = false;
+    }
+  }
+
+  mount(main(),
+    h('div', { class: 'page-head' }, h('h1', {}, isNew ? 'Add user' : `Edit ${displayName(u)}`),
+      h('a', { class: 'btn secondary', href: '#/users' }, 'Cancel')),
+    h('form', { class: 'card', onsubmit: submit, novalidate: true },
+      h('div', { class: 'grid-2' },
+        h('div', {},
+          field('Full name', fullName),
+          field('Username', username, { hint: 'What they type to sign in. Letters, numbers, dots or dashes; no spaces.' }),
+          field('Email', email, { hint: isNew ? 'Their email address. It cannot be changed later.' : 'Cannot be changed — their samples are linked to it.' })),
+        h('div', {},
+          field('Role', roleSel),
+          roleHint,
+          h('label', { class: 'check-row', for: 'Active' }, active, h('span', {}, 'Can sign in')),
+          isSelf ? h('p', { class: 'muted small' }, 'You cannot change your own role or remove your own access.') : null,
+          field('Access code', code, { hint: isNew ? '4–12 digits. Leave blank and one will be made for you.' : 'Change this to give them a new code (the old one stops working).' }),
+          h('button', { class: 'btn secondary small', type: 'button', onclick: () => { code.value = String(Math.floor(100000 + Math.random() * 900000)); } }, 'Generate new code'))),
+      msg,
+      h('div', { class: 'row end' }, saveBtn)));
 }
 
 // ---------------------------------------------------------------------------

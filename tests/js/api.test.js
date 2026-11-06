@@ -316,3 +316,46 @@ test('data quality report and spreadsheet menu exports', () => {
   g.gs.buildSampleSummary();
   assert.equal(g.table('Export_SampleSummary').length, 2);
 });
+
+test('admins add and edit users; rules are enforced and changes audited', () => {
+  const g = createSeededGas();
+  const save = (who, user, isNew = false) => g.post({ action: 'saveUser', ...who, isNew, user });
+  const add = save(ADMIN, { UserEmail: ' Sam@Farm.nz ', Username: 'Sam', FullName: 'Sam Wilson', Role: 'Collector' }, true);
+  assert.equal(add.ok, true, add.error);
+  assert.equal(add.user.UserEmail, 'sam@farm.nz');
+  assert.equal(add.user.Username, 'sam');
+  assert.match(add.user.AccessCode, /^[1-9]\d{5}$/); // generated
+  const signIn = g.post({ action: 'login', login: 'sam', code: add.user.AccessCode });
+  assert.equal(signIn.user.FullName, 'Sam Wilson');
+  assert.equal(signIn.user.Role, 'Collector');
+
+  // Validation
+  assert.match(save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam2', FullName: 'X', Role: 'Collector' }, true).error, /already exists/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'lee', FullName: 'X', Role: 'Collector' }, true).error, /already taken/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'has space', FullName: 'X', Role: 'Collector' }, true).error, /Username/);
+  assert.match(save(ADMIN, { UserEmail: 'not-an-email', Username: 'abc', FullName: 'X', Role: 'Collector' }, true).error, /valid email/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'abc', FullName: '', Role: 'Collector' }, true).error, /full name/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'abc', FullName: 'X', Role: 'Boss' }, true).error, /role/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'abc', FullName: 'X', Role: 'Collector', AccessCode: '0123' }, true).error, /Access code/);
+  assert.match(save(ADMIN, { UserEmail: 'ghost@farm.nz', Username: 'ghost', FullName: 'X', Role: 'Collector' }).error, /not found/);
+
+  // Promote to analyst, change code, then deactivate: the old code stops working.
+  const edit = save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam', FullName: 'Sam Wilson', Role: 'Analyst', Active: true, AccessCode: '765432' });
+  assert.equal(edit.user.Role, 'Analyst');
+  assert.equal(g.post({ action: 'login', login: 'sam', code: add.user.AccessCode }).ok, false);
+  assert.equal(g.post({ action: 'login', login: 'sam', code: '765432' }).user.Role, 'Analyst');
+  save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam', FullName: 'Sam Wilson', Role: 'Analyst', Active: false });
+  assert.match(g.post({ action: 'login', login: 'sam', code: '765432' }).error, /not active/);
+
+  // Admins cannot lock themselves out; non-admins cannot manage users.
+  assert.match(save(ADMIN, { UserEmail: 'admin@farm.nz', Username: 'ana', FullName: 'Ana Admin', Role: 'Analyst', Active: true }).error, /your own administrator/);
+  assert.match(save(ADMIN, { UserEmail: 'admin@farm.nz', Username: 'ana', FullName: 'Ana Admin', Role: 'Administrator', Active: false }).error, /your own administrator/);
+  assert.match(save(LAB, { UserEmail: 'x@farm.nz', Username: 'x', FullName: 'X', Role: 'Administrator' }, true).error, /Administrators only/);
+  assert.equal(g.post({ action: 'listUsers', ...LAB }).ok, false);
+
+  const list = g.post({ action: 'listUsers', ...ADMIN });
+  assert.ok(list.users.find((u) => u.UserEmail === 'sam@farm.nz').AccessCode === '765432');
+  const audit = g.table('AuditLog').filter((a) => a.TableName === 'Users').map((a) => a.Summary);
+  assert.deepEqual(audit, ['Added as Collector', 'Role: Collector → Analyst; AccessCode changed', 'Active: true → false']);
+  assert.ok(audit.every((x) => !/765432/.test(x)), 'codes never written to the audit log');
+});

@@ -27,7 +27,9 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     if (await page.isVisible('#apiUrl') === false) await page.click('summary:has-text("Server address")');
     await page.fill('#apiUrl', '/api');
     await page.click('button:has-text("Sign in")');
-    await page.waitForSelector('.tiles');
+    await page.waitForSelector('.tiles, form p.error:not(:empty)');
+    const err = await page.$eval('form p.error', (e) => e.textContent).catch(() => '');
+    if (err) throw new Error(`Sign-in as ${login} failed: ${err}`);
   }
 
   async function signOut() {
@@ -238,6 +240,29 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     assert.equal(audit.length, 1);
     assert.match(audit[0].Summary, /TetranychusCount: 4 → 5/);
 
+    // Admin adds a collector, who can then sign in.
+    await page.goto(`${url}/#/`);
+    await page.click('text=Manage Users');
+    await page.waitForSelector('.sample-card:has-text("Cole Collector")');
+    await page.click('text=+ Add user');
+    await page.fill('#FullName', 'Sam Wilson');
+    assert.equal(await page.inputValue('#Username'), 'sam'); // suggested from the name
+    await page.fill('#UserEmail', 'sam@farm.nz');
+    await page.selectOption('#Role', 'Collector');
+    await page.click('button:has-text("Add user")');
+    await page.waitForSelector('text=Sam Wilson added');
+    const samCode = await page.textContent('#newCode');
+    assert.match(samCode, /^\d{6}$/);
+    await page.click('text=Back to users');
+    await page.click('.sample-card:has-text("Ana Admin")');
+    assert.equal(await page.isDisabled('#Role'), true, 'admin cannot demote themselves');
+    await signOut();
+    await signIn('sam', samCode);
+    assert.ok(await page.isVisible('text=Sam Wilson · Collector'));
+    assert.equal(await page.isVisible('text=Manage Users'), false);
+    await signOut();
+    await signIn('ana', '111111');
+
     // Server unreachable: changes wait safely and the badge says so.
     server.apiDown = true;
     await page.goto(`${url}/#/sample/${done.SampleID}`);
@@ -262,7 +287,7 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
 
     // Phone-sized screen has no horizontal scroll on the main screens.
     await page.setViewportSize({ width: 390, height: 800 });
-    for (const hash of ['#/', '#/new', '#/help', '#/samples/all', `#/sample/${done.SampleID}`, `#/leaf/${done.SampleID}/new`, '#/reports']) {
+    for (const hash of ['#/', '#/new', '#/help', '#/users', '#/user/new', '#/samples/all', `#/sample/${done.SampleID}`, `#/leaf/${done.SampleID}/new`, '#/reports']) {
       await page.goto(`${url}/${hash}`);
       await page.waitForTimeout(300);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

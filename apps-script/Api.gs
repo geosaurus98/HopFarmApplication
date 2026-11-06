@@ -11,6 +11,7 @@
  * against the Users tab (Active user + AccessCode).
  *
  * Actions: login · pull · push · uploadPhoto · leaves · export · dataQuality
+ *          listUsers · saveUser (administrators only)
  */
 
 const API_VERSION = 1;
@@ -39,6 +40,8 @@ function doPost(e) {
       case 'leaves': return json_({ ok: true, leaves: leavesForSample_(body.sampleId) });
       case 'export': return json_(Object.assign({ ok: true }, export_(user, body)));
       case 'dataQuality': return json_({ ok: true, issues: requireAdmin_(user) && dataQualityIssues_() });
+      case 'listUsers': return json_({ ok: true, users: requireAdmin_(user) && readTable_('Users').map(adminUser_) });
+      case 'saveUser': return json_(Object.assign({ ok: true }, saveUser_(user, body.user || {}, !!body.isNew)));
       default: throw new Error('Unknown action');
     }
   } catch (err) {
@@ -410,4 +413,86 @@ function export_(user, body) {
   }
   const rows = leafExportRows_(filter);
   return { csv: toCsv_(LEAF_EXPORT_HEADERS, rows), rows: rows.length, filename: 'hopfarm_leaf_results' + suffix + '.csv' };
+}
+
+// ---------------------------------------------------------------------------
+// User management (administrators only)
+// ---------------------------------------------------------------------------
+const USERNAME_RE = /^[a-z0-9._-]{2,40}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ACCESS_CODE_RE = /^[1-9]\d{3,11}$/; // no leading zero: Sheets would drop it
+
+/** Admin view of a user: includes the access code so it can be passed on. */
+function adminUser_(u) {
+  return Object.assign(publicUser_(u), {
+    AccessCode: String(u.AccessCode || '').trim(),
+    CreatedAt: serializeValue_('CreatedAt', u.CreatedAt),
+    UpdatedAt: serializeValue_('UpdatedAt', u.UpdatedAt)
+  });
+}
+
+/**
+ * Add (isNew) or update a user. Email identifies the person and cannot be
+ * changed afterwards, because samples and leaves are linked by it.
+ * A blank access code on a new user generates one.
+ */
+function saveUser_(admin, input, isNew) {
+  requireAdmin_(admin);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const table = openTable_('Users');
+    const email = String(input.UserEmail || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) throw new Error('Enter a valid email address.');
+    const same = r => String(r.UserEmail || '').trim().toLowerCase() === email;
+    const existing = table.rows.filter(same)[0];
+    if (isNew && existing) throw new Error('A user with this email already exists.');
+    if (!isNew && !existing) throw new Error('User not found.');
+
+    const username = String(input.Username || '').trim().toLowerCase();
+    if (!USERNAME_RE.test(username)) throw new Error('Username: 2–40 characters, letters, numbers, dots, dashes or underscores only, no spaces.');
+    const clash = table.rows.filter(r => !same(r) && String(r.UserEmail || '').trim() !== '' &&
+      (String(r.Username || '').trim().toLowerCase() === username || String(r.UserEmail).trim().toLowerCase() === username))[0];
+    if (clash) throw new Error('The username "' + username + '" is already taken.');
+
+    const fullName = String(input.FullName || '').trim();
+    if (!fullName) throw new Error('Enter the person\'s full name.');
+    if (ROLES.indexOf(input.Role) === -1) throw new Error('Choose a role.');
+    const active = input.Active === undefined ? true : toBool_(input.Active);
+
+    let code = String(input.AccessCode || '').trim();
+    if (!code && isNew) code = newAccessCode_();
+    if (code && !ACCESS_CODE_RE.test(code)) throw new Error('Access code: 4–12 digits, not starting with 0.');
+
+    const isSelf = email === String(admin.UserEmail).trim().toLowerCase();
+    if (isSelf && (!active || input.Role !== 'Administrator')) {
+      throw new Error('You cannot remove your own administrator access. Ask another administrator.');
+    }
+
+    const now = new Date();
+    const rec = existing || { UserEmail: email, CreatedAt: now };
+    const before = existing ? Object.assign({}, existing) : null;
+    rec.Username = username;
+    rec.FullName = fullName;
+    rec.Role = input.Role;
+    rec.Active = active;
+    if (code) rec.AccessCode = code;
+    rec.UpdatedAt = now;
+    if (existing) table.touch(rec); else table.insert(rec);
+    table.flush();
+
+    const changes = before
+      ? ['Username', 'FullName', 'Role', 'Active']
+          .filter(f => String(before[f]) !== String(rec[f]))
+          .map(f => f + ': ' + before[f] + ' → ' + rec[f])
+          .concat(String(before.AccessCode) !== String(rec.AccessCode) ? ['AccessCode changed'] : [])
+      : ['Added as ' + rec.Role];
+    appendRows_('AuditLog', [{
+      AuditID: Utilities.getUuid(), TableName: 'Users', RowID: email, ChangedBy: admin.UserEmail,
+      ChangedAt: now, Summary: changes.join('; ') || '(no change)'
+    }]);
+    return { user: adminUser_(rec) };
+  } finally {
+    lock.releaseLock();
+  }
 }

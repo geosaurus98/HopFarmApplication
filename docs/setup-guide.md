@@ -52,7 +52,9 @@ variety:
 - If an area changes later, edit `AreaHa`. Samples already collected keep the
   area and leaf target they were collected with.
 
-**Users**: one row per person.
+**Users**: one row per person. After this first setup, administrators can add
+and change people from inside the app (**Manage Users** on the home screen),
+so you rarely need to edit this tab by hand.
 
 | UserEmail | Username | FullName | Role | Active | AccessCode |
 |---|---|---|---|---|---|
@@ -139,7 +141,7 @@ so staff don't have to type it.
 |---|---|
 | Field collector | Open the app on Wi-Fi before going out (it syncs). Record each bag with **New Mite Sample**. Back in range, changes upload by themselves; the badge at the top shows anything still waiting. |
 | Analyst | **Analyse Samples → choose the bag → Start analysis**. Enter the five counts and press **Save & next leaf** (or Enter on the last box). **Save & stop** pauses; **Resume at leaf N** continues. Finish with **Complete analysis**. |
-| Administrator | Maintain blocks and users in the sheet. Correct completed samples in the app (every change is logged in **AuditLog**). Run **Hop Farm → Run data quality report** from time to time. |
+| Administrator | **Manage Users** in the app: add people, change roles, issue a new access code, or untick *Can sign in* when someone leaves. Maintain blocks in the sheet. Correct completed samples in the app (every change is logged in **AuditLog**). Run **Hop Farm → Run data quality report** from time to time. |
 
 **Don't** sign out, clear browser data or uninstall the app while the badge
 shows changes waiting to upload.
