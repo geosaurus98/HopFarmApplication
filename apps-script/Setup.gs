@@ -272,40 +272,76 @@ function defaultUsers_() {
   }] : [];
 }
 
-/** EXAMPLE rows only — replace with the farm's real blocks and areas. */
+/** Nelson Lakes Hops block list (from Jason, July 2026). Seeded only into an empty tab. */
 function exampleBlockVarieties_() {
   const now = new Date();
   return [
-    ['A1', 'Cascade', 7.84], ['C2', 'Riwaka', 5.00], ['L2', 'SBH-02', 4.20],
-    ['H1', 'Example', 3.38], ['K2', 'Example', 11.77]
+    ['A1', 'Cascade', 7.84],
+    ['B1', 'Nelson Sauvin', 19.78],
+    ['C1', 'Nelson Sauvin', 10.26],
+    ['C2', 'Paradisi', 1.27],
+    ['C2', 'Riwaka', 8.24],
+    ['D1', 'Nelson Sauvin', 9.50],
+    ['D2', 'Nelson Sauvin', 15.47],
+    ['E1', 'Cascade', 2.83],
+    ['E1', 'Motueka', 3.48],
+    ['E1', 'Nelson Sauvin', 0.79],
+    ['F1', 'Motueka', 8.76],
+    ['F2', 'Rakau', 14.39],
+    ['F3', 'Southern Cross', 4.84],
+    ['G1', 'Riwaka', 14.39],
+    ['H1', 'Southern Cross', 3.38],
+    ['H2', 'Nelson Sauvin', 3.77],
+    ['I1', 'Riwaka', 4.06],
+    ['I2', 'Nelson Sauvin', 11.19],
+    ['I3', 'Nelson Sauvin', 4.52],
+    ['I4', 'Motueka', 4.29],
+    ['J1', 'Riwaka', 10.90],
+    ['J2', 'Nelson Sauvin', 11.70],
+    ['J2', 'SBH-02', 0.23],
+    ['J3', 'Rakau', 3.62],
+    ['K1', 'Motueka', 13.46],
+    ['K2', 'Riwaka', 11.77],
+    ['K3', 'Nelson Sauvin', 3.99],
+    ['K4', 'Nelson Sauvin', 9.73],
+    ['L1', 'Riwaka', 3.04],
+    ['L2', 'Cascade', 13.86],
+    ['L2', 'Comet NZ', 0.04],
+    ['L2', 'SBH-02', 1.90],
+    ['L2', 'SBH-04', 0.07],
+    ['M4', 'Trial 1', 2.89],
+    ['N1', 'Southern Cross', 7.45],
+    ['N2', 'Motueka', 8.62],
+    ['N2', 'SBH-02', 4.40],
+    ['N3', 'Riwaka', 18.59],
+    ['N4', 'Motueka', 15.42]
   ].map(r => ({
     BlockVarietyID: r[0] + '-' + String(r[1]).toUpperCase().replace(/[^A-Z0-9]+/g, ''),
-    Block: r[0], Variety: r[1], AreaHa: r[2], Active: true,
-    Notes: 'EXAMPLE ROW – replace with the real block, variety and area', UpdatedAt: now
+    Block: r[0], Variety: r[1], AreaHa: r[2], Active: true, Notes: '', UpdatedAt: now
   }));
 }
 
 /** Starter help text. Check against the farm's own posters; add photo links in Image. */
 function helpContent_() {
   const rows = [
-    ['Identification', 'Two-spotted spider mite (Tetranychus urticae) — "TwoSM"',
-     'Pest mite. Adults about 0.5 mm, oval, pale yellow-green to straw coloured with two dark spots on the body (the spots are food showing through). Usually on the underside of the leaf, often with fine webbing and pale stippling damage on the upper surface. Overwintering females can be orange-red — do not confuse with P. persimilis. Count every live mobile stage (adults and nymphs) as TwoSM.'],
+    ['Identification', 'Two-spotted spider mite (Tetranychus urticae) — "2SM"',
+     'Pest mite. Adults about 0.5 mm, oval, pale yellow-green to straw coloured with two dark spots on the body (the spots are food showing through). Usually on the underside of the leaf, often with fine webbing and pale stippling damage on the upper surface. Overwintering females can be orange-red — do not confuse with P. persimilis. Count every live mobile stage (adults and nymphs) as 2SM.'],
     ['Identification', 'Two-spotted mite eggs',
-     'Tiny (about 0.13 mm), perfectly round, clear to pearly white when laid, turning creamy as they develop. Often among webbing on the leaf underside. Record as "TwoSM eggs", not in the live count.'],
+     'Tiny (about 0.13 mm), perfectly round, clear to pearly white when laid, turning creamy as they develop. Often among webbing on the leaf underside. Record as "2SM eggs", not in the live count.'],
     ['Identification', 'Phytoseiulus persimilis (PP) — predatory mite',
      'Beneficial predator. Slightly larger than TwoSM, bright orange-red, pear/teardrop shaped, no dark spots, long front legs and moves quickly. Count adults and nymphs as PP.'],
     ['Identification', 'Predator eggs',
-     'Oval rather than round and roughly twice the size of TwoSM eggs; pinkish-orange to pale when fresh. Record as "Predator eggs".'],
+     'Oval rather than round and roughly twice the size of TwoSM eggs; pinkish-orange to pale when fresh. Record as "PP eggs".'],
     ['Identification', 'Ladybirds (including the mite-eating Stethorus)',
-     'Stethorus is a very small (about 1.5 mm) shiny black ladybird whose adults and larvae eat spider mites. Larger ladybirds and their larvae may also be present. Count under "Other beneficials" and choose the type.'],
+     'Stethorus is a very small (about 1.5 mm) shiny black ladybird whose adults and larvae eat spider mites. Larger ladybirds and their larvae may also be present. Count under "Beneficials" and choose the type.'],
     ['Identification', 'Lacewings',
-     'Green or brown lacewing larvae are long with large curved jaws; eggs sit on fine stalks. Count under "Other beneficials" and choose the type.'],
+     'Green or brown lacewing larvae are long with large curved jaws; eggs sit on fine stalks. Count under "Beneficials" and choose the type.'],
     ['Identification', 'Other beneficial organisms',
-     'Predatory thrips, predatory midge larvae (orange maggots in mite colonies), predatory bugs, spiders. Count under "Other beneficials" and choose or type the type. If unsure, add a leaf comment and photo.'],
+     'Predatory thrips, predatory midge larvae (orange maggots in mite colonies), predatory bugs, spiders. Count under "Beneficials" and choose or type the type. If unsure, add a leaf comment and photo.'],
     ['How to', 'Collecting a sample in the field',
      '1) Before leaving Wi-Fi, open the app and check it says "All changes synced". 2) Tap New Mite Sample. 3) Enter the number written on the bag. 4) Choose the block and variety — the app shows how many leaves to collect. 5) Add comments or photos if something is unusual. 6) Tap Save sample. It is stored on the tablet even with no signal.'],
     ['How to', 'Analysing a sample in the office',
-     '1) Open Analyse Samples and choose the sample. 2) Check the bag number matches. 3) Tap Start analysis. 4) Enter the five counts and tap Save & next leaf — the next leaf opens automatically. 5) To pause, tap Save & stop (or Stop without saving on an empty leaf). Nothing is lost. 6) When all leaves are done, tap Complete analysis.'],
+     '1) Open Analyse Samples and choose the sample. 2) Check the bag number matches. 3) Tap Start analysis. 4) Enter the five counts (PP, 2SM, PP eggs, 2SM eggs, Beneficials) and tap Save & next leaf — the next leaf opens automatically. 5) To pause, tap Save & stop (or Stop without saving on an empty leaf). Nothing is lost. 6) When all leaves are done, tap Complete analysis.'],
     ['How to', 'Zero means "looked and found none"',
      'Enter 0 when you have checked the leaf and found none of that organism. Blank counts cannot be saved, so a blank can never be mistaken for zero. The "Blanks → 0" button fills every empty count with 0 in one tap.'],
     ['How to', 'Syncing and offline use',
@@ -392,7 +428,7 @@ function isoDate_(v) {
 const LEAF_EXPORT_HEADERS = [
   'SampleID', 'SampleNumber', 'Season', 'CollectionDate', 'WeekStarting', 'Collector', 'Block',
   'Variety', 'AreaHa', 'TargetLeafCount', 'LeafNumber', 'Analyst', 'AnalysisDateTime',
-  'TetranychusCount', 'PhytoseiulusCount', 'TwoSpotEggCount', 'PredatorEggCount',
+  'PhytoseiulusCount', 'TetranychusCount', 'PredatorEggCount', 'TwoSpotEggCount',
   'OtherBeneficialCount', 'OtherBeneficialDescription', 'LeafComment', 'SampleComments',
   'AnalysisComments', 'SampleStatus', 'SamplePhoto1', 'SamplePhoto2', 'LeafPhoto'
 ];
@@ -445,7 +481,7 @@ function leafExportRows_(filter) {
         s.SampleID, s.SampleNumber, s.Season, d, weekStarting(d), nameOf_(names, s.CollectorEmail),
         s.Block, s.Variety, s.AreaHaAtCollection, s.TargetLeafCount, l.LeafNumber,
         nameOf_(names, l.AnalystEmail), localDateTime_(l.AnalysisDateTime),
-        l.TetranychusCount, l.PhytoseiulusCount, l.TwoSpotEggCount, l.PredatorEggCount,
+        l.PhytoseiulusCount, l.TetranychusCount, l.PredatorEggCount, l.TwoSpotEggCount,
         l.OtherBeneficialCount, l.OtherBeneficialDescription, l.LeafComment, s.SampleComments,
         s.AnalysisComments, s.Status, s.SamplePhoto1, s.SamplePhoto2, l.LeafPhoto
       ];

@@ -37,8 +37,13 @@ you can.
 
 ## 2. Enter the farm's data (10 min)
 
-**BlockVarieties**: delete the five example rows and enter one row per block and
-variety:
+**BlockVarieties**: a new sheet starts with the farm's 39 blocks and areas
+already filled in. If your sheet was created earlier with example rows, load
+the real list: download
+[`templates/BlockVarieties.csv`](../templates/BlockVarieties.csv) (on GitHub,
+open it and use the **Download raw file** button), open the
+**BlockVarieties** tab, and use **File → Import → Upload → Replace current
+sheet**. Each row is one block and variety:
 
 | BlockVarietyID | Block | Variety | AreaHa | Active |
 |---|---|---|---|---|

@@ -30,7 +30,7 @@ test('setup creates every tab with headers, is idempotent, seeds an admin with a
   assert.equal(users.length, 1);
   assert.equal(users[0].Role, 'Administrator');
   assert.match(users[0].AccessCode, /^\d{6}$/);
-  assert.equal(g.table('BlockVarieties').length, 5);
+  assert.equal(g.table('BlockVarieties').length, 39);
   assert.ok(g.table('HelpReference').length >= 10);
 });
 
@@ -301,7 +301,7 @@ test('data quality report and spreadsheet menu exports', () => {
     newSample('sample-0001', { CollectorEmail: 'lab@farm.nz' }),
     newLeaf('leaf-00001', 'sample-0001', 1, counts(250, 0, 0, 0, 0)),
     { table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis Complete' } },
-    newSample('sample-0002', { CollectorEmail: 'lab@farm.nz', BlockVarietyID: 'H1-EXAMPLE' }),
+    newSample('sample-0002', { CollectorEmail: 'lab@farm.nz', BlockVarietyID: 'H1-SOUTHERNCROSS' }),
     { table: 'Samples', id: 'sample-0002', patch: { Status: 'Analysis In Progress' } },
     { table: 'Samples', id: 'sample-0002', patch: { Status: 'Analysis Complete' } },
   ]);

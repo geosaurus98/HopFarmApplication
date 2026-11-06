@@ -21,7 +21,7 @@ from pathlib import Path
 LEAF_EXPORT_HEADERS = [
     "SampleID", "SampleNumber", "Season", "CollectionDate", "WeekStarting", "Collector", "Block",
     "Variety", "AreaHa", "TargetLeafCount", "LeafNumber", "Analyst", "AnalysisDateTime",
-    "TetranychusCount", "PhytoseiulusCount", "TwoSpotEggCount", "PredatorEggCount",
+    "PhytoseiulusCount", "TetranychusCount", "PredatorEggCount", "TwoSpotEggCount",
     "OtherBeneficialCount", "OtherBeneficialDescription", "LeafComment", "SampleComments",
     "AnalysisComments", "SampleStatus", "SamplePhoto1", "SamplePhoto2", "LeafPhoto",
 ]

@@ -52,7 +52,7 @@ test('counts: zero valid, blank / negative / decimal rejected', () => {
   assert.ok(L.validateLeaf({ ...leaf, PhytoseiulusCount: '' }).PhytoseiulusCount);
   assert.ok(L.validateLeaf(leaf, [{ LeafAnalysisID: 'b', LeafNumber: 2 }]).LeafNumber);
   assert.deepEqual(L.validateLeaf(leaf, [{ LeafAnalysisID: 'b', LeafNumber: 2, Deleted: true }]), {});
-  assert.deepEqual(L.highCounts({ ...leaf, TetranychusCount: 101 }).map((f) => f.short), ['TwoSM']);
+  assert.deepEqual(L.highCounts({ ...leaf, TetranychusCount: 101 }).map((f) => f.short), ['2SM']);
 });
 
 test('sample validation and duplicate bag warning', () => {

@@ -587,15 +587,11 @@ async function viewSample(id) {
         info('Analysis comments', s.AnalysisComments),
         h('div', { class: 'row wrap' }, await photoView(s.SamplePhoto1), await photoView(s.SamplePhoto2)))),
     p.analysed ? h('section', { class: 'card' },
-      h('h2', {}, 'Results'),
+      h('h2', {}, 'Results — average per leaf'),
+      sampleBars(sum),
       h('div', { class: 'stats' },
-        stat('Two-spotted mites', sum.TotalTwoSM, `${sum.AvgTwoSMPerLeaf} per leaf`),
-        stat('Predatory mites (PP)', sum.TotalPP, `${sum.AvgPPPerLeaf} per leaf`),
-        stat('TwoSM eggs', sum.TotalTwoSMEggs),
-        stat('Predator eggs', sum.TotalPredatorEggs),
-        stat('Other beneficials', sum.TotalOtherBeneficial),
-        stat('Predator : pest', sum.PredatorToPestRatio ?? '—'),
-        stat('Leaves with TwoSM', pct(sum.PctLeavesWithTwoSM)))) : null,
+        stat('PP : 2SM ratio', sum.PredatorToPestRatio ?? '—', 'predators per pest mite'),
+        stat('Leaves with 2SM', pct(sum.PctLeavesWithTwoSM), `${sum.LeavesWithTwoSM} of ${sum.LeavesAnalysed}`))) : null,
     h('section', { class: 'card' },
       h('h2', {}, `Leaves (${leaves.length})`),
       leaves.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'leaf-table' },
@@ -876,17 +872,24 @@ async function viewReports() {
     }
   }
 
-  // Trend chart
+  // Week by week: one small bar chart per count, each bar one sample (Jason: "a simple bar
+  // graph for each sample so comparison could be made from week to week on the number of each").
   const trendBlock = h('select', { id: 'trendBlock' }, used.map((b) => h('option', { value: b.BlockVarietyID }, L.blockLabel(b))));
-  const trendMeasure = h('select', { id: 'trendMeasure' }, L.TREND_MEASURES.map((m) => h('option', { value: m.key }, m.label)));
   const trendSeason = h('select', { id: 'trendSeason' }, h('option', { value: '' }, 'All seasons'), seasons.map((x) => h('option', { value: x, selected: x === seasons[0] }, x)));
-  const chartBox = h('div', { class: 'chart' });
+  const chartBox = h('div', {});
   const drawTrend = () => {
-    const measure = L.TREND_MEASURES.find((m) => m.key === trendMeasure.value);
-    const pts = L.trendPoints(samples, bySample, trendBlock.value, trendMeasure.value, trendSeason.value);
-    chartBox.replaceChildren(lineChart(pts, measure));
+    const series = L.TREND_MEASURES.map((m) => ({ m, pts: L.trendPoints(samples, bySample, trendBlock.value, m.key, trendSeason.value) }));
+    if (!series[0].pts.length) {
+      mount(chartBox, h('p', { class: 'muted' }, 'No analysed samples for this block and season on this tablet yet.'));
+      return;
+    }
+    mount(chartBox,
+      h('div', { class: 'small-multiples' }, series.map(({ m, pts }) => h('figure', { class: 'chart-card' },
+        h('figcaption', {}, m.label, h('span', { class: 'muted small' }, ' · average per leaf')),
+        weekBars(pts, m)))),
+      trendTable(series, (id) => L.liveLeaves(bySample.get(id) || []).length));
   };
-  [trendBlock, trendMeasure, trendSeason].forEach((el) => el.addEventListener('change', drawTrend));
+  [trendBlock, trendSeason].forEach((el) => el.addEventListener('change', drawTrend));
 
   // Block comparison for a season
   const cmpSeason = h('select', {}, seasons.map((x) => h('option', { value: x }, x)));
@@ -900,9 +903,10 @@ async function viewReports() {
       return { b, n: ss.filter((s) => (bySample.get(s.SampleID) || []).length).length, leaves: ls.length, tot };
     }).filter((r) => r.leaves);
     cmpBox.replaceChildren(rows.length ? h('table', {},
-      h('thead', {}, h('tr', {}, ['Block', 'Samples', 'Leaves', 'TwoSM / leaf', 'PP / leaf', 'TwoSM eggs / leaf', 'Leaves with TwoSM', 'Pred : pest'].map((x) => h('th', {}, x)))),
+      h('thead', {}, h('tr', {}, ['Block', 'Samples', 'Leaves', 'PP / leaf', '2SM / leaf', 'PP eggs / leaf', '2SM eggs / leaf', 'Beneficials / leaf', 'Leaves with 2SM', 'PP : 2SM'].map((x) => h('th', {}, x)))),
       h('tbody', {}, rows.map((r) => h('tr', {}, h('td', {}, L.blockLabel(r.b)), h('td', {}, r.n), h('td', {}, r.leaves),
-        h('td', {}, r.tot.AvgTwoSMPerLeaf), h('td', {}, r.tot.AvgPPPerLeaf), h('td', {}, r.tot.AvgTwoSMEggsPerLeaf),
+        h('td', {}, r.tot.AvgPPPerLeaf), h('td', {}, r.tot.AvgTwoSMPerLeaf), h('td', {}, r.tot.AvgPredatorEggsPerLeaf),
+        h('td', {}, r.tot.AvgTwoSMEggsPerLeaf), h('td', {}, r.tot.AvgOtherBeneficialPerLeaf),
         h('td', {}, pct(r.tot.PctLeavesWithTwoSM)), h('td', {}, r.tot.PredatorToPestRatio ?? '—'))))) : h('p', { class: 'muted' }, 'No analysed leaves for this season on this tablet.'));
   };
   cmpSeason.addEventListener('change', drawCmp);
@@ -918,35 +922,89 @@ async function viewReports() {
         h('button', { class: 'btn primary', type: 'button', id: 'exportSummary', onclick: () => doExport('summary') }, '⬇ Sample summary CSV')),
       exportMsg) : null,
     h('section', { class: 'card' },
-      h('h2', {}, 'Trend by block'),
-      used.length ? h('div', {}, h('div', { class: 'row wrap' }, trendBlock, trendMeasure, trendSeason), chartBox)
+      h('h2', {}, 'Week by week'),
+      h('p', { class: 'muted small' }, 'Each bar is one sample from the chosen block. Tap a bar to see its value. Each chart has its own scale.'),
+      used.length ? h('div', {}, h('div', { class: 'row wrap' }, trendBlock, trendSeason), chartBox)
         : h('p', { class: 'muted' }, 'No samples yet.')),
     seasons.length ? h('section', { class: 'card' }, h('h2', {}, 'Compare blocks'), h('div', { class: 'row' }, cmpSeason), cmpBox) : null);
   if (used.length) drawTrend();
   if (seasons.length) drawCmp();
 }
 
-/** Minimal accessible SVG line chart: one point per sample, x = collection date. */
-function lineChart(points, measure) {
-  if (!points.length) return h('p', { class: 'muted' }, 'No analysed samples for this block and season yet.');
-  const W = 720; const H = 280; const pad = { l: 48, r: 16, t: 16, b: 40 };
-  const t = (p) => new Date(`${p.date}T00:00:00Z`).getTime();
-  const x0 = t(points[0]); const x1 = t(points[points.length - 1]);
-  const yMax = Math.max(...points.map((p) => p.value), measure.key.startsWith('Pct') ? 1 : 0.0001);
-  const niceMax = measure.key.startsWith('Pct') ? 1 : niceCeil(yMax);
-  const sx = (p) => pad.l + (x1 === x0 ? (W - pad.l - pad.r) / 2 : ((t(p) - x0) / (x1 - x0)) * (W - pad.l - pad.r));
-  const sy = (v) => H - pad.b - (v / niceMax) * (H - pad.t - pad.b);
-  const fmtV = (v) => (measure.key.startsWith('Pct') ? pct(v) : String(Math.round(v * 100) / 100));
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * niceMax);
-  const xLabels = points.length <= 8 ? points : points.filter((_, i) => i % Math.ceil(points.length / 8) === 0);
-  return svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `${measure.label} over time` },
-    ticks.map((v) => svg('g', {},
-      svg('line', { x1: pad.l, x2: W - pad.r, y1: sy(v), y2: sy(v), class: 'grid' }),
-      svg('text', { x: pad.l - 6, y: sy(v) + 4, 'text-anchor': 'end', class: 'axis' }, fmtV(v)))),
-    xLabels.map((p) => svg('text', { x: sx(p), y: H - pad.b + 18, 'text-anchor': 'middle', class: 'axis' }, fmtDate(p.date).slice(0, 5))),
-    svg('polyline', { points: points.map((p) => `${sx(p)},${sy(p.value)}`).join(' '), class: 'line' }),
-    points.map((p) => svg('circle', { cx: sx(p), cy: sy(p.value), r: 5, class: 'pt' },
-      svg('title', {}, `Bag ${p.sample.SampleNumber}, ${fmtDate(p.date)}: ${fmtV(p.value)}`))));
+const fmtNum = (v) => String(Math.round(v * 100) / 100);
+
+/** SVG path for a column with 4px rounded top corners, square at the baseline. */
+function columnPath(x, y, w, base) {
+  const r = Math.min(4, w / 2, base - y);
+  return `M${x},${base}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${base}Z`;
+}
+
+/**
+ * Column chart for one measure: one bar per sample, in date order.
+ * Tap or hover a bar to read its value in the line under the chart (works on touch);
+ * the latest bar is labelled directly.
+ */
+function weekBars(points, measure) {
+  const W = 360; const H = 190; const pad = { l: 34, r: 8, t: 18, b: 30 };
+  const top = Math.max(...points.map((p) => p.value));
+  const max = top > 0 ? niceCeil(top) : 1; // all zeros: show a 0–1 scale, not 0/0/0
+  const n = points.length;
+  const band = (W - pad.l - pad.r) / n;
+  const bw = Math.max(3, Math.min(32, band - 2));
+  const base = H - pad.b;
+  const sy = (v) => base - (v / max) * (H - pad.t - pad.b);
+  const describe = (p) => `${fmtDate(p.date)} · bag ${p.sample.SampleNumber}: ${fmtNum(p.value)} ${measure.short} per leaf`;
+  const readout = h('div', { class: 'chart-readout', 'aria-live': 'polite' }, `Latest: ${describe(points[n - 1])}`);
+  const every = Math.ceil(n / 7);
+  const bars = [];
+  const select = (i) => {
+    bars.forEach((b, j) => b.classList.toggle('active', j === i));
+    readout.textContent = describe(points[i]);
+  };
+  const svgEl = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `${measure.label}, average per leaf, by sample date` },
+    [0, 0.5, 1].map((f) => svg('g', {},
+      svg('line', { x1: pad.l, x2: W - pad.r, y1: sy(f * max), y2: sy(f * max), class: f ? 'grid' : 'baseline' }),
+      svg('text', { x: pad.l - 5, y: sy(f * max) + 4, 'text-anchor': 'end', class: 'axis' }, fmtNum(f * max)))),
+    points.map((p, i) => {
+      const x = pad.l + i * band + (band - bw) / 2;
+      const bar = svg('path', { d: columnPath(x, sy(p.value), bw, base), class: `bar${i === n - 1 ? ' latest' : ''}` });
+      bars.push(bar);
+      return svg('g', { class: 'bar-group', tabindex: 0, onclick: null },
+        bar,
+        svg('rect', { x: pad.l + i * band, y: pad.t, width: band, height: base - pad.t, class: 'hit' }),
+        (i % every === 0 || i === n - 1) ? svg('text', { x: x + bw / 2, y: base + 16, 'text-anchor': 'middle', class: 'axis' }, fmtDate(p.date).slice(0, 5)) : null,
+        i === n - 1 ? svg('text', { x: x + bw / 2, y: sy(p.value) - 5, 'text-anchor': 'middle', class: 'value-label' }, fmtNum(p.value)) : null);
+    }));
+  svgEl.querySelectorAll('.bar-group').forEach((g, i) => {
+    g.addEventListener('pointerenter', () => select(i));
+    g.addEventListener('click', () => select(i));
+    g.addEventListener('focus', () => select(i));
+  });
+  return h('div', { class: 'chart' }, svgEl, readout);
+}
+
+/** The same numbers as a table (accessibility, and for reading exact values). */
+function trendTable(series, leafCount) {
+  const rows = series[0].pts;
+  return h('details', { class: 'chart-table' },
+    h('summary', {}, 'Show the numbers'),
+    h('div', { class: 'table-wrap' }, h('table', {},
+      h('thead', {}, h('tr', {}, h('th', {}, 'Date'), h('th', {}, 'Bag'), h('th', {}, 'Leaves'), series.map(({ m }) => h('th', {}, `${m.short} / leaf`)))),
+      h('tbody', {}, rows.map((p, i) => h('tr', {},
+        h('td', {}, fmtDate(p.date)), h('td', {}, String(p.sample.SampleNumber)),
+        h('td', {}, String(leafCount(p.sample.SampleID))),
+        series.map(({ pts }) => h('td', {}, fmtNum(pts[i].value)))))))));
+}
+
+/** One sample: horizontal bars of the average per leaf for each count, on a shared scale. */
+function sampleBars(sum) {
+  const rows = L.TREND_MEASURES.map((m) => ({ m, v: sum[m.key] ?? 0 }));
+  const max = Math.max(...rows.map((r) => r.v), 0.0001);
+  return h('div', { class: 'hbars', role: 'img', 'aria-label': `Average per leaf: ${rows.map((r) => `${r.m.short} ${fmtNum(r.v)}`).join(', ')}` },
+    rows.map(({ m, v }) => h('div', { class: 'hbar-row' },
+      h('span', { class: 'hbar-label' }, m.short),
+      h('span', { class: 'hbar-track' }, h('span', { class: 'hbar', style: { width: `${(v / max) * 100}%` } })),
+      h('span', { class: 'hbar-value' }, fmtNum(v)))));
 }
 
 function niceCeil(v) {

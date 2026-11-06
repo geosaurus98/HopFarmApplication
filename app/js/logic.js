@@ -8,12 +8,13 @@ export const STATUS = Object.freeze({
   CANCELLED: 'Cancelled',
 });
 
+// Order and names as the farm uses them (Jason, July 2026): PP, 2SM, PP eggs, 2SM eggs, beneficials.
 export const COUNT_FIELDS = Object.freeze([
-  { key: 'TetranychusCount', short: 'TwoSM', label: 'Two-spotted mite', latin: 'Tetranychus urticae' },
   { key: 'PhytoseiulusCount', short: 'PP', label: 'Predatory mite', latin: 'Phytoseiulus persimilis' },
-  { key: 'TwoSpotEggCount', short: 'TwoSM eggs', label: 'Two-spotted mite eggs', latin: '' },
-  { key: 'PredatorEggCount', short: 'Pred. eggs', label: 'Predator eggs', latin: '' },
-  { key: 'OtherBeneficialCount', short: 'Other ben.', label: 'Other beneficials', latin: 'ladybirds, lacewings…' },
+  { key: 'TetranychusCount', short: '2SM', label: 'Two-spotted mite', latin: 'Tetranychus urticae' },
+  { key: 'PredatorEggCount', short: 'PP eggs', label: 'Predator eggs', latin: '' },
+  { key: 'TwoSpotEggCount', short: '2SM eggs', label: 'Two-spotted mite eggs', latin: '' },
+  { key: 'OtherBeneficialCount', short: 'Beneficials', label: 'Other beneficials', latin: 'ladybirds, lacewings…' },
 ]);
 
 export const BENEFICIAL_TYPES = Object.freeze([
@@ -195,7 +196,9 @@ export function sampleSummary(sample, leaves) {
     TotalTwoSMEggs: sum('TwoSpotEggCount'),
     AvgTwoSMEggsPerLeaf: n ? round3(sum('TwoSpotEggCount') / n) : null,
     TotalPredatorEggs: sum('PredatorEggCount'),
+    AvgPredatorEggsPerLeaf: n ? round3(sum('PredatorEggCount') / n) : null,
     TotalOtherBeneficial: sum('OtherBeneficialCount'),
+    AvgOtherBeneficialPerLeaf: n ? round3(sum('OtherBeneficialCount') / n) : null,
     PredatorToPestRatio: tsm ? round3(pp / tsm) : null,
     LeavesWithTwoSM: infested,
     PctLeavesWithTwoSM: n ? round3(infested / n) : null,
@@ -205,7 +208,7 @@ export function sampleSummary(sample, leaves) {
 export const LEAF_EXPORT_HEADERS = [
   'SampleID', 'SampleNumber', 'Season', 'CollectionDate', 'WeekStarting', 'Collector', 'Block',
   'Variety', 'AreaHa', 'TargetLeafCount', 'LeafNumber', 'Analyst', 'AnalysisDateTime',
-  'TetranychusCount', 'PhytoseiulusCount', 'TwoSpotEggCount', 'PredatorEggCount',
+  'PhytoseiulusCount', 'TetranychusCount', 'PredatorEggCount', 'TwoSpotEggCount',
   'OtherBeneficialCount', 'OtherBeneficialDescription', 'LeafComment', 'SampleComments',
   'AnalysisComments', 'SampleStatus', 'SamplePhoto1', 'SamplePhoto2', 'LeafPhoto',
 ];
@@ -232,8 +235,8 @@ export function leafExportRows(samples, leaves, nameOf = (e) => e) {
     .map(([s, l]) => [
       s.SampleID, s.SampleNumber, s.Season || seasonOf(s.CollectionDate), s.CollectionDate, weekStarting(s.CollectionDate),
       nameOf(s.CollectorEmail), s.Block, s.Variety, s.AreaHaAtCollection, s.TargetLeafCount, l.LeafNumber,
-      nameOf(l.AnalystEmail), localDateTime(l.AnalysisDateTime), l.TetranychusCount, l.PhytoseiulusCount, l.TwoSpotEggCount,
-      l.PredatorEggCount, l.OtherBeneficialCount, l.OtherBeneficialDescription, l.LeafComment, s.SampleComments,
+      nameOf(l.AnalystEmail), localDateTime(l.AnalysisDateTime), l.PhytoseiulusCount, l.TetranychusCount, l.PredatorEggCount,
+      l.TwoSpotEggCount, l.OtherBeneficialCount, l.OtherBeneficialDescription, l.LeafComment, s.SampleComments,
       s.AnalysisComments, s.Status, photoRef(s.SamplePhoto1), photoRef(s.SamplePhoto2), photoRef(l.LeafPhoto),
     ]);
 }
@@ -273,12 +276,13 @@ export function groupBy(rows, key) {
   return m;
 }
 
+/** Per-leaf averages charted week by week, one small chart each, in the farm's order. */
 export const TREND_MEASURES = Object.freeze([
-  { key: 'AvgTwoSMPerLeaf', label: 'Two-spotted mites per leaf' },
-  { key: 'AvgPPPerLeaf', label: 'Predatory mites (PP) per leaf' },
-  { key: 'AvgTwoSMEggsPerLeaf', label: 'Two-spotted mite eggs per leaf' },
-  { key: 'PctLeavesWithTwoSM', label: 'Share of leaves with two-spotted mites' },
-  { key: 'PredatorToPestRatio', label: 'Predator : pest ratio' },
+  { key: 'AvgPPPerLeaf', label: 'PP — predatory mites', short: 'PP' },
+  { key: 'AvgTwoSMPerLeaf', label: '2SM — two-spotted mites', short: '2SM' },
+  { key: 'AvgPredatorEggsPerLeaf', label: 'PP eggs', short: 'PP eggs' },
+  { key: 'AvgTwoSMEggsPerLeaf', label: '2SM eggs', short: '2SM eggs' },
+  { key: 'AvgOtherBeneficialPerLeaf', label: 'Beneficials', short: 'Beneficials' },
 ]);
 
 /**

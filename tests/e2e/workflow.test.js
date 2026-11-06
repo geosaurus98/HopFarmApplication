@@ -74,9 +74,9 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.click('button:has-text("Save sample")'); // empty form -> validation
     await page.waitForSelector('text=Enter the number written on the sample bag.');
     await page.fill('#SampleNumber', '1043');
-    await page.selectOption('#BlockVarietyID', 'H1-EXAMPLE');
+    await page.selectOption('#BlockVarietyID', 'H1-SOUTHERNCROSS');
     assert.equal(await page.textContent('#targetLeaves'), '50'); // 3.38 ha -> minimum 50
-    await page.selectOption('#BlockVarietyID', 'K2-EXAMPLE');
+    await page.selectOption('#BlockVarietyID', 'K2-RIWAKA');
     assert.equal(await page.textContent('#targetLeaves'), '115');
     await page.click('button:has-text("Save sample")');
     await page.waitForSelector('text=Bag 1043 saved');
@@ -139,8 +139,8 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     assert.equal(await page.inputValue('#LeafComment'), '');
 
     // Leaf 2 with +/- buttons and Enter-to-advance.
-    await page.click('button[aria-label="TwoSM plus one"]');
-    await page.click('button[aria-label="TwoSM plus one"]');
+    await page.click('button[aria-label="2SM plus one"]');
+    await page.click('button[aria-label="2SM plus one"]');
     assert.equal(await page.inputValue('#TetranychusCount'), '2');
     await page.click('button:has-text("Blanks → 0")');
     await page.focus('#OtherBeneficialCount');
@@ -154,6 +154,9 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.click('dialog button:has-text("Yes, save it")');
     await page.waitForSelector('#leavesAnalysed:has-text("3")');
     assert.ok(await page.isVisible('text=72'), 'remaining = 75 - 3');
+    // Per-sample bar chart, farm order, average per leaf.
+    assert.deepEqual(await page.$$eval('.hbar-label', (els) => els.map((e) => e.textContent)), ['PP', '2SM', 'PP eggs', '2SM eggs', 'Beneficials']);
+    assert.equal(await page.textContent('.hbar-row:nth-child(2) .hbar-value'), '52');
     await shot('04-sample-detail');
 
     // Pause and resume: continues at leaf 4, no duplicates.
@@ -206,7 +209,14 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
 
     // ---- Reports: CSV for Excel, one row per leaf ----
     await page.goto(`${url}/#/reports`);
-    await page.waitForSelector('.chart svg circle');
+    // Week-by-week: five small bar charts in the farm's order; tapping a bar shows its value.
+    await page.waitForSelector('.small-multiples .chart svg path.bar');
+    assert.deepEqual(await page.$$eval('.chart-card figcaption', (els) => els.map((e) => e.firstChild.textContent)),
+      ['PP — predatory mites', '2SM — two-spotted mites', 'PP eggs', '2SM eggs', 'Beneficials']);
+    await page.click('.chart-card:nth-child(2) .bar-group >> nth=0');
+    assert.match(await page.textContent('.chart-card:nth-child(2) .chart-readout'), /bag 1042: 52 2SM per leaf/); // (4+2+150)/3
+    await page.click('summary:has-text("Show the numbers")');
+    assert.ok(await page.isVisible('.chart-table td:has-text("1042")'));
     await shot('06-reports');
     const [download] = await Promise.all([page.waitForEvent('download'), page.click('#exportLeaves')]);
     assert.match(download.suggestedFilename(), /^hopfarm_leaf_results_all-seasons_.*\.csv$/);
