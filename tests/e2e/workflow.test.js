@@ -256,6 +256,22 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.click('text=Back to users');
     await page.click('.sample-card:has-text("Ana Admin")');
     assert.equal(await page.isDisabled('#Role'), true, 'admin cannot demote themselves');
+    assert.equal(await page.isVisible('button:has-text("Save changes")'), true, 'but can edit their own details');
+    // Another administrator is view-only.
+    await page.goto(`${url}/#/user/new`);
+    await page.fill('#FullName', 'Bob Boss');
+    await page.fill('#UserEmail', 'bob@farm.nz');
+    await page.selectOption('#Role', 'Administrator');
+    await page.click('button:has-text("Add user")');
+    await page.waitForSelector('#newCode');
+    const bobCode = await page.textContent('#newCode');
+    await page.goto(`${url}/#/users`);
+    await page.click('.sample-card:has-text("Bob Boss")');
+    await page.waitForSelector('#readOnlyNote');
+    assert.equal(await page.inputValue('#AccessCode'), bobCode, 'code can be viewed');
+    assert.equal(await page.isVisible('button:has-text("Save changes")'), false);
+    assert.equal(await page.isVisible('text=Generate new code'), false);
+    assert.equal(await page.isDisabled('#Role'), true);
     await signOut();
     await signIn('sam', samCode);
     assert.ok(await page.isVisible('text=Sam Wilson · Collector'));

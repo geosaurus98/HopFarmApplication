@@ -435,6 +435,8 @@ function adminUser_(u) {
  * Add (isNew) or update a user. Email identifies the person and cannot be
  * changed afterwards, because samples and leaves are linked by it.
  * A blank access code on a new user generates one.
+ * Other administrators are view-only (an admin may edit their own name,
+ * username and code, but not their own role or access).
  */
 function saveUser_(admin, input, isNew) {
   requireAdmin_(admin);
@@ -448,6 +450,10 @@ function saveUser_(admin, input, isNew) {
     const existing = table.rows.filter(same)[0];
     if (isNew && existing) throw new Error('A user with this email already exists.');
     if (!isNew && !existing) throw new Error('User not found.');
+    const isSelf = email === String(admin.UserEmail).trim().toLowerCase();
+    if (existing && existing.Role === 'Administrator' && !isSelf) {
+      throw new Error('Other administrators can be viewed but not changed. The spreadsheet owner can change them in the Users tab.');
+    }
 
     const username = String(input.Username || '').trim().toLowerCase();
     if (!USERNAME_RE.test(username)) throw new Error('Username: 2–40 characters, letters, numbers, dots, dashes or underscores only, no spaces.');
@@ -464,7 +470,6 @@ function saveUser_(admin, input, isNew) {
     if (!code && isNew) code = newAccessCode_();
     if (code && !ACCESS_CODE_RE.test(code)) throw new Error('Access code: 4–12 digits, not starting with 0.');
 
-    const isSelf = email === String(admin.UserEmail).trim().toLowerCase();
     if (isSelf && (!active || input.Role !== 'Administrator')) {
       throw new Error('You cannot remove your own administrator access. Ask another administrator.');
     }

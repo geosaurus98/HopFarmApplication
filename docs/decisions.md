@@ -36,6 +36,7 @@ The defaults below are built in. Each can be changed in a few lines.
 |---|---|
 | Season | 1 July – 30 June, labelled `2026/27` (the NZ hop season spans New Year). |
 | Unusually high count | A confirmation is asked above 100 for any count. The value is never blocked (§6.5). |
+| Managing administrators | Admins can add users (including new admins) and edit Collectors and Analysts. Other admins are view-only, so one admin can't lock out or take over another. An admin can change their own name, username and code, but not their own role or access. Changes to admins are made by the spreadsheet owner in the Users tab. |
 | Leaf deletion | Allowed while analysis is in progress (and for admins). The row is kept in the sheet with `Deleted = TRUE` and left out of all results. Remaining leaves keep their numbers. |
 | Draft status | In the status list for completeness, but not used. Saving a sample makes it *Awaiting Analysis* (§5.6). |
 | Two devices entering the same leaf number offline | Both rows are kept (no observation is lost) and the data-quality report flags the duplicate. |

@@ -54,7 +54,9 @@ variety:
 
 **Users**: one row per person. After this first setup, administrators can add
 and change people from inside the app (**Manage Users** on the home screen),
-so you rarely need to edit this tab by hand.
+so you rarely need to edit this tab by hand. Administrators can view other
+administrators (including their access codes) but not change them; only the
+spreadsheet owner can, by editing this tab.
 
 | UserEmail | Username | FullName | Role | Active | AccessCode |
 |---|---|---|---|---|---|

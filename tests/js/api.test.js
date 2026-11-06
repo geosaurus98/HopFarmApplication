@@ -353,9 +353,24 @@ test('admins add and edit users; rules are enforced and changes audited', () => 
   assert.match(save(LAB, { UserEmail: 'x@farm.nz', Username: 'x', FullName: 'X', Role: 'Administrator' }, true).error, /Administrators only/);
   assert.equal(g.post({ action: 'listUsers', ...LAB }).ok, false);
 
+  // Other administrators are view-only; an admin can still change their own details and code.
+  const bob = save(ADMIN, { UserEmail: 'bob@farm.nz', Username: 'bob', FullName: 'Bob Boss', Role: 'Administrator' }, true);
+  assert.equal(bob.ok, true);
+  const BOB = { login: 'bob', code: bob.user.AccessCode };
+  for (const change of [{ AccessCode: '999999' }, { Role: 'Analyst' }, { Active: false }, { FullName: 'Renamed' }]) {
+    const r = save(BOB, { UserEmail: 'admin@farm.nz', Username: 'ana', FullName: 'Ana Admin', Role: 'Administrator', Active: true, ...change });
+    assert.match(r.error, /viewed but not changed/, JSON.stringify(change));
+  }
+  assert.equal(g.post({ action: 'login', login: 'ana', code: '111111' }).ok, true, 'Ana unchanged');
+  assert.equal(g.post({ action: 'listUsers', ...BOB }).users.find((u) => u.Username === 'ana').AccessCode, '111111', 'codes are visible');
+  const own = save(BOB, { UserEmail: 'bob@farm.nz', Username: 'bobby', FullName: 'Bob B', Role: 'Administrator', Active: true, AccessCode: '424242' });
+  assert.equal(own.ok, true, own.error);
+  assert.equal(g.post({ action: 'login', login: 'bobby', code: '424242' }).user.FullName, 'Bob B');
+
   const list = g.post({ action: 'listUsers', ...ADMIN });
   assert.ok(list.users.find((u) => u.UserEmail === 'sam@farm.nz').AccessCode === '765432');
   const audit = g.table('AuditLog').filter((a) => a.TableName === 'Users').map((a) => a.Summary);
-  assert.deepEqual(audit, ['Added as Collector', 'Role: Collector → Analyst; AccessCode changed', 'Active: true → false']);
+  assert.deepEqual(audit, ['Added as Collector', 'Role: Collector → Analyst; AccessCode changed', 'Active: true → false',
+    'Added as Administrator', 'Username: bob → bobby; FullName: Bob Boss → Bob B; AccessCode changed']);
   assert.ok(audit.every((x) => !/765432/.test(x)), 'codes never written to the audit log');
 });

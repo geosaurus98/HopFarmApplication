@@ -1019,12 +1019,14 @@ async function viewUserForm(id) {
     if (!u) return notFound();
   }
   const isSelf = !isNew && u.UserEmail.toLowerCase() === me().toLowerCase();
-  const fullName = h('input', { id: 'FullName', type: 'text', value: u.FullName || '', autocomplete: 'off' });
-  const username = h('input', { id: 'Username', type: 'text', value: u.Username || '', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: false });
+  // Other administrators are view-only.
+  const readOnly = !isNew && !isSelf && u.Role === 'Administrator';
+  const fullName = h('input', { id: 'FullName', type: 'text', value: u.FullName || '', autocomplete: 'off', disabled: readOnly });
+  const username = h('input', { id: 'Username', type: 'text', value: u.Username || '', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: false, disabled: readOnly });
   const email = h('input', { id: 'UserEmail', type: 'email', value: u.UserEmail, disabled: !isNew, autocomplete: 'off' });
-  const roleSel = h('select', { id: 'Role', disabled: isSelf }, L.ROLES.map((r) => h('option', { value: r, selected: u.Role === r }, r)));
-  const active = h('input', { id: 'Active', type: 'checkbox', checked: !!u.Active, disabled: isSelf, class: 'checkbox' });
-  const code = h('input', { id: 'AccessCode', type: 'text', inputmode: 'numeric', value: u.AccessCode || '', placeholder: isNew ? 'Leave blank to generate one' : '', autocomplete: 'off' });
+  const roleSel = h('select', { id: 'Role', disabled: isSelf || readOnly }, L.ROLES.map((r) => h('option', { value: r, selected: u.Role === r }, r)));
+  const active = h('input', { id: 'Active', type: 'checkbox', checked: !!u.Active, disabled: isSelf || readOnly, class: 'checkbox' });
+  const code = h('input', { id: 'AccessCode', type: 'text', inputmode: 'numeric', value: u.AccessCode || '', placeholder: isNew ? 'Leave blank to generate one' : '', autocomplete: 'off', readonly: readOnly });
   const msg = h('p', { class: 'error', role: 'alert' });
   const saveBtn = h('button', { class: 'btn primary big', type: 'submit' }, isNew ? 'Add user' : 'Save changes');
   const roleHelp = {
@@ -1079,8 +1081,9 @@ async function viewUserForm(id) {
   }
 
   mount(main(),
-    h('div', { class: 'page-head' }, h('h1', {}, isNew ? 'Add user' : `Edit ${displayName(u)}`),
-      h('a', { class: 'btn secondary', href: '#/users' }, 'Cancel')),
+    h('div', { class: 'page-head' }, h('h1', {}, isNew ? 'Add user' : `${readOnly ? '' : 'Edit '}${displayName(u)}`),
+      h('a', { class: 'btn secondary', href: '#/users' }, readOnly ? 'Back' : 'Cancel')),
+    readOnly ? h('p', { class: 'warning', id: 'readOnlyNote' }, 'Administrators can view other administrators but not change them. The spreadsheet owner can change them in the Users tab.') : null,
     h('form', { class: 'card', onsubmit: submit, novalidate: true },
       h('div', { class: 'grid-2' },
         h('div', {},
@@ -1092,10 +1095,10 @@ async function viewUserForm(id) {
           roleHint,
           h('label', { class: 'check-row', for: 'Active' }, active, h('span', {}, 'Can sign in')),
           isSelf ? h('p', { class: 'muted small' }, 'You cannot change your own role or remove your own access.') : null,
-          field('Access code', code, { hint: isNew ? '4–12 digits. Leave blank and one will be made for you.' : 'Change this to give them a new code (the old one stops working).' }),
-          h('button', { class: 'btn secondary small', type: 'button', onclick: () => { code.value = String(Math.floor(100000 + Math.random() * 900000)); } }, 'Generate new code'))),
+          field('Access code', code, { hint: readOnly ? '' : isNew ? '4–12 digits. Leave blank and one will be made for you.' : 'Change this to give them a new code (the old one stops working).' }),
+          readOnly ? null : h('button', { class: 'btn secondary small', type: 'button', onclick: () => { code.value = String(Math.floor(100000 + Math.random() * 900000)); } }, 'Generate new code'))),
       msg,
-      h('div', { class: 'row end' }, saveBtn)));
+      readOnly ? null : h('div', { class: 'row end' }, saveBtn)));
 }
 
 // ---------------------------------------------------------------------------
