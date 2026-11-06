@@ -6,7 +6,9 @@ import { h, svg, mount, toast, confirmDialog, fmtDate, fmtDateTime, fmtAgo, pct,
 import { DEFAULT_API_URL, APP_VERSION } from './config.js';
 
 const main = () => document.getElementById('main');
-let session = null; // { apiUrl, email, code, user: { UserEmail, UserName, Role } }
+let session = null; // { apiUrl, login, code, user: { UserEmail, Username, FullName, Role } }
+
+const displayName = (u) => (u && (u.FullName || u.UserName || u.Username || u.UserEmail)) || '';
 
 const role = () => session?.user?.Role || '';
 const me = () => session?.user?.UserEmail || '';
@@ -15,7 +17,7 @@ const go = (hash) => { if (location.hash === hash) render(); else location.hash 
 
 async function userNames() {
   const users = await db.getAll('users');
-  const m = new Map(users.map((u) => [String(u.UserEmail).toLowerCase(), u.UserName || u.UserEmail]));
+  const m = new Map(users.map((u) => [String(u.UserEmail).toLowerCase(), displayName(u)]));
   return (email) => m.get(String(email || '').toLowerCase()) || email || '';
 }
 
@@ -46,7 +48,7 @@ function renderHeader() {
   mount(header,
     h('a', { class: 'brand', href: '#/' }, h('img', { src: 'icons/icon.svg', alt: '' }), h('span', {}, 'Hop Farm')),
     h('div', { class: 'spacer' }),
-    session ? h('span', { class: 'who' }, `${session.user.UserName} · ${session.user.Role}`) : null,
+    session ? h('span', { class: 'who' }, `${displayName(session.user)} · ${session.user.Role}`) : null,
     session ? h('a', { class: 'sync-badge', id: 'syncBadge', href: '#/sync', 'aria-label': 'Sync status' }) : null);
   renderSyncBadge(getStatus());
 }
@@ -119,7 +121,10 @@ async function renderNow() {
 async function viewLogin() {
   const saved = (await db.getMeta('lastLogin')) || {};
   const apiUrl = h('input', { id: 'apiUrl', type: 'text', inputmode: 'url', spellcheck: false, value: saved.apiUrl || DEFAULT_API_URL, placeholder: 'https://script.google.com/macros/s/…/exec', autocomplete: 'off' });
-  const email = h('input', { id: 'email', type: 'email', value: saved.email || '', autocomplete: 'username', required: true });
+  const login = h('input', {
+    id: 'login', type: 'text', value: saved.login || saved.email || '', autocomplete: 'username',
+    autocapitalize: 'none', autocorrect: 'off', spellcheck: false, required: true,
+  });
   const code = h('input', { id: 'code', type: 'password', inputmode: 'numeric', autocomplete: 'current-password', required: true });
   const msg = h('p', { class: 'error', role: 'alert' });
   const btn = h('button', { class: 'btn primary big', type: 'submit' }, 'Sign in');
@@ -127,9 +132,9 @@ async function viewLogin() {
   async function submit(e) {
     e.preventDefault();
     msg.textContent = '';
-    const creds = { apiUrl: apiUrl.value.trim(), email: email.value.trim().toLowerCase(), code: code.value.trim() };
+    const creds = { apiUrl: apiUrl.value.trim(), login: login.value.trim().toLowerCase(), code: code.value.trim() };
     if (!creds.apiUrl) { msg.textContent = 'Enter the server address (ask your administrator).'; return; }
-    if (!creds.email || !creds.code) { msg.textContent = 'Enter your email and access code.'; return; }
+    if (!creds.login || !creds.code) { msg.textContent = 'Enter your username and access code.'; return; }
     btn.disabled = true;
     btn.textContent = 'Signing in…';
     try {
@@ -137,12 +142,13 @@ async function viewLogin() {
       // A different person signing in on this tablet must not inherit someone else's queue.
       const prev = await db.getMeta('lastLogin');
       const pending = await db.count('outbox');
-      if (prev?.email && prev.email !== creds.email && pending > 0) {
-        throw new Error(`This tablet still has ${pending} change(s) from ${prev.email} waiting to upload. Ask them to sign in and sync first.`);
+      const prevEmail = prev?.userEmail || prev?.email;
+      if (prevEmail && prevEmail.toLowerCase() !== user.UserEmail.toLowerCase() && pending > 0) {
+        throw new Error(`This tablet still has ${pending} change(s) from ${prev.name || prevEmail} waiting to upload. Ask them to sign in and sync first.`);
       }
       session = { ...creds, user };
       await db.setMeta('session', session);
-      await db.setMeta('lastLogin', { apiUrl: creds.apiUrl, email: creds.email });
+      await db.setMeta('lastLogin', { apiUrl: creds.apiUrl, login: creds.login, userEmail: user.UserEmail, name: displayName(user) });
       renderHeader();
       btn.textContent = 'Downloading blocks and samples…';
       await sync();
@@ -158,7 +164,7 @@ async function viewLogin() {
     h('form', { class: 'card narrow', onsubmit: submit, novalidate: true },
       h('h1', {}, 'Sign in'),
       h('p', { class: 'muted' }, 'Sign in once while connected. After that the app works without internet.'),
-      field('Email', email),
+      field('Username', login, { hint: 'Your email address also works.' }),
       field('Access code', code, { hint: 'Your administrator gives you this code.' }),
       h('details', { open: !apiUrl.value },
         h('summary', {}, 'Server address'),
@@ -365,7 +371,7 @@ async function viewSampleForm(id) {
         dupBox,
         field('Block and variety', blockSel, { hint: blockLocked ? 'Locked because analysis has started.' : '' }),
         field('Collection date', date),
-        h('div', { class: 'muted small' }, `Collector: ${existing ? (await userNames())(existing.CollectorEmail) : session.user.UserName}`)),
+        h('div', { class: 'muted small' }, `Collector: ${existing ? (await userNames())(existing.CollectorEmail) : displayName(session.user)}`)),
       targetBox),
     field('Comments (optional)', comments),
     h('div', { class: 'row wrap' }, photoInput('Add photo 1', photo1, 'sample'), photoInput('Add photo 2', photo2, 'sample')),
@@ -971,7 +977,8 @@ async function viewSync() {
         }, 'Discard')))) : null,
     h('section', { class: 'card' },
       h('h2', {}, 'Account'),
-      h('div', { class: 'kv' }, h('span', {}, 'Signed in as'), h('strong', {}, `${session.user.UserName} (${session.user.UserEmail})`)),
+      h('div', { class: 'kv' }, h('span', {}, 'Signed in as'), h('strong', {}, `${displayName(session.user)}${session.user.Username ? ` (${session.user.Username})` : ''}`)),
+      h('div', { class: 'kv' }, h('span', {}, 'Email'), h('strong', {}, session.user.UserEmail)),
       h('div', { class: 'kv' }, h('span', {}, 'Role'), h('strong', {}, session.user.Role)),
       h('div', { class: 'kv' }, h('span', {}, 'Server'), h('span', { class: 'small break' }, session.apiUrl)),
       h('div', { class: 'kv' }, h('span', {}, 'App version'), h('span', {}, APP_VERSION)),
@@ -986,7 +993,7 @@ async function viewSync() {
             await db.setMeta('session', null);
           } else {
             await db.wipe();
-            await db.setMeta('lastLogin', { apiUrl: session.apiUrl, email: session.email });
+            await db.setMeta('lastLogin', { apiUrl: session.apiUrl, login: session.login || session.email, userEmail: session.user.UserEmail, name: displayName(session.user) });
           }
           session = null;
           renderHeader();

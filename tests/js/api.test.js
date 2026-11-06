@@ -39,9 +39,41 @@ test('setup adds missing columns to an existing sheet without moving data', () =
   const sh = g.ss.insertSheet('Users');
   sh.getRange(1, 1, 2, 3).setValues([['UserEmail', 'UserName', 'Role'], ['x@y.nz', 'X', 'Analyst']]);
   g.gs.setupHopFarmWorkbook();
-  assert.deepEqual(g.sheets.Users.data[0].slice(0, 4), ['UserEmail', 'UserName', 'Role', 'Active']);
+  assert.deepEqual(g.sheets.Users.data[0].slice(0, 5), ['UserEmail', 'UserName', 'Role', 'Username', 'FullName']);
   assert.equal(g.sheets.Users.data[1][0], 'x@y.nz');
   assert.equal(g.table('Users').length, 1); // not re-seeded because it had data
+});
+
+test('duplicate usernames cannot sign in and are reported', () => {
+  const g = createSeededGas();
+  g.addRow('Users', { UserEmail: 'lee2@farm.nz', Username: 'LEE', FullName: 'Another Lee', Role: 'Analyst', Active: true, AccessCode: '555555' });
+  const r = g.post({ action: 'login', login: 'lee', code: '333333' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /Two people share the username/);
+  assert.equal(g.post({ action: 'login', login: 'lab@farm.nz', code: '333333' }).ok, true); // email still works
+  g.gs.buildDataQualityReport();
+  assert.ok(g.table('Report_DataQuality').some((x) => /Username "lee" is also used/.test(x.Issue)));
+});
+
+test('upgrading an old Users tab fills Username and FullName without overwriting', () => {
+  const g = createGas();
+  const sh = g.ss.insertSheet('Users');
+  sh.getRange(1, 1, 4, 6).setValues([
+    ['UserEmail', 'UserName', 'Role', 'Active', 'AccessCode', 'CreatedAt'],
+    ['geo.saurus@farm.nz', 'George Saurus', 'Administrator', true, '123456', ''],
+    ['Geo.Saurus@other.nz', 'Second Geo', 'Analyst', true, '654321', ''],
+    ['sam@farm.nz', '', 'Collector', true, '111222', ''],
+  ]);
+  g.gs.setupHopFarmWorkbook();
+  const users = g.table('Users');
+  assert.deepEqual(users.map((u) => [u.Username, u.FullName]), [['geo.saurus', 'George Saurus'], ['geo.saurus2', 'Second Geo'], ['sam', '']]);
+  const r = g.post({ action: 'login', login: 'geo.saurus', code: '123456' });
+  assert.equal(r.user.FullName, 'George Saurus');
+  assert.equal(g.post({ action: 'login', login: 'sam', code: '111222' }).user.FullName, 'sam@farm.nz'); // falls back to email
+  // Re-running does not change anything already set.
+  g.sheets.Users.data[1][g.sheets.Users.data[0].indexOf('FullName')] = 'George S.';
+  g.gs.setupHopFarmWorkbook();
+  assert.equal(g.table('Users')[0].FullName, 'George S.');
 });
 
 test('calculations: leaf target, season, week', () => {
@@ -55,18 +87,25 @@ test('calculations: leaf target, season, week', () => {
   assert.equal(g.gs.weekStarting('2026-11-08'), '2026-11-02'); // Sunday
 });
 
-test('login checks email, code and active flag; never returns access codes', () => {
+test('login by username or email, checks code and active flag; never returns access codes', () => {
   const g = createSeededGas();
-  const ok = g.post({ action: 'login', email: 'LAB@farm.nz ', code: '333333' });
+  const byName = g.post({ action: 'login', login: ' Lee ', code: '333333' });
+  assert.equal(byName.ok, true);
+  assert.deepEqual(byName.user, { UserEmail: 'lab@farm.nz', Username: 'lee', FullName: 'Lee Analyst', Role: 'Analyst', Active: true });
+  const ok = g.post({ action: 'login', login: 'LAB@farm.nz ', code: '333333' });
   assert.equal(ok.ok, true);
   assert.equal(ok.user.Role, 'Analyst');
-  assert.equal(g.post({ action: 'login', email: 'lab@farm.nz', code: '000000' }).auth, true);
-  assert.equal(g.post({ action: 'login', email: 'nobody@farm.nz', code: '333333' }).ok, false);
-  const inactive = g.post({ action: 'login', email: 'gone@farm.nz', code: '444444' });
+  // Older app versions send `email`.
+  assert.equal(g.post({ action: 'login', email: 'lab@farm.nz', code: '333333' }).ok, true);
+  assert.match(g.post({ action: 'login', login: 'lee', code: '111111' }).error, /Username or access code not recognised/);
+  assert.equal(g.post({ action: 'login', login: 'lab@farm.nz', code: '000000' }).auth, true);
+  assert.equal(g.post({ action: 'login', login: 'nobody', code: '333333' }).ok, false);
+  const inactive = g.post({ action: 'login', login: 'old', code: '444444' });
   assert.equal(inactive.ok, false);
   assert.match(inactive.error, /not active/);
   const pull = g.post({ action: 'pull', ...LAB });
   assert.ok(pull.users.every((u) => !('AccessCode' in u)));
+  assert.ok(pull.users.some((u) => u.FullName === 'Cole Collector'));
   assert.equal(g.post({ action: 'nope', ...LAB }).error, 'Unknown action');
   assert.equal(g.post('not json').ok, false);
 });

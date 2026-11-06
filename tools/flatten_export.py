@@ -73,7 +73,7 @@ def _num_key(value: str) -> tuple:
 
 
 def flatten(samples: list[dict], leaves: list[dict], users: list[dict] | None = None) -> list[dict]:
-    names = {u["UserEmail"].lower(): u.get("UserName") or u["UserEmail"] for u in users or []}
+    names = {u["UserEmail"].lower(): u.get("FullName") or u.get("UserName") or u["UserEmail"] for u in users or []}
 
     def name(email: str) -> str:
         return names.get((email or "").lower(), email or "")

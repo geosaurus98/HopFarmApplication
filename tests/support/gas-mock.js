@@ -118,9 +118,9 @@ function createSeededGas(opts) {
   g.gs.setupHopFarmWorkbook();
   g.sheets.Users.data.length = 1; // replace the auto-created admin with known users
   const now = new Date();
-  [['admin@farm.nz', 'Ana Admin', 'Administrator', '111111'], ['col@farm.nz', 'Cole Collector', 'Collector', '222222'],
-    ['lab@farm.nz', 'Lee Analyst', 'Analyst', '333333'], ['gone@farm.nz', 'Old Staff', 'Analyst', '444444', false]]
-    .forEach(([e, n, r, c, active = true]) => g.addRow('Users', { UserEmail: e, UserName: n, Role: r, Active: active, AccessCode: c, CreatedAt: now, UpdatedAt: now }));
+  [['admin@farm.nz', 'ana', 'Ana Admin', 'Administrator', '111111'], ['col@farm.nz', 'cole', 'Cole Collector', 'Collector', '222222'],
+    ['lab@farm.nz', 'lee', 'Lee Analyst', 'Analyst', '333333'], ['gone@farm.nz', 'old', 'Old Staff', 'Analyst', '444444', false]]
+    .forEach(([e, u, n, r, c, active = true]) => g.addRow('Users', { UserEmail: e, Username: u, FullName: n, Role: r, Active: active, AccessCode: c, CreatedAt: now, UpdatedAt: now }));
   return g;
 }
 

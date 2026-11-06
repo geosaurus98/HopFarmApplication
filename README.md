@@ -51,9 +51,9 @@ npm start              # local server at http://localhost:8080
 ```
 
 `npm start` runs the real Apps Script code against an in-memory spreadsheet.
-Sign in with server address `/api` and one of these test accounts:
-`col@farm.nz` / `222222` (Collector), `lab@farm.nz` / `333333` (Analyst),
-`admin@farm.nz` / `111111` (Administrator).
+Sign in with server address `/api` and one of these test accounts
+(username / code): `cole` / `222222` (Collector), `lee` / `333333` (Analyst),
+`ana` / `111111` (Administrator).
 
 When you change files in `app/`, bump `CACHE` in `app/sw.js` and `APP_VERSION`
 in `app/js/config.js` so installed tablets pick up the new version.

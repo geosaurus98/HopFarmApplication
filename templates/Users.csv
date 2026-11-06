@@ -1,4 +1,4 @@
-UserEmail,UserName,Role,Active,AccessCode,CreatedAt,UpdatedAt
-admin@example.com,Farm Administrator,Administrator,TRUE,111111,2026-11-01 08:00:00,2026-11-01 08:00:00
-collector@example.com,Field Collector,Collector,TRUE,222222,2026-11-01 08:00:00,2026-11-01 08:00:00
-analyst@example.com,Office Analyst,Analyst,TRUE,333333,2026-11-01 08:00:00,2026-11-01 08:00:00
+UserEmail,Username,FullName,Role,Active,AccessCode,CreatedAt,UpdatedAt
+admin@example.com,admin,Farm Administrator,Administrator,TRUE,111111,2026-11-01 08:00:00,2026-11-01 08:00:00
+collector@example.com,collector,Field Collector,Collector,TRUE,222222,2026-11-01 08:00:00,2026-11-01 08:00:00
+analyst@example.com,analyst,Office Analyst,Analyst,TRUE,333333,2026-11-01 08:00:00,2026-11-01 08:00:00

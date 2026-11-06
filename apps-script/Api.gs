@@ -6,8 +6,9 @@
  * Copy the /exec URL into the app's sign-in screen ("Server address").
  *
  * Every request is a POST with a text/plain JSON body (avoids a CORS preflight):
- *   { action, email, code, ...params }
- * and is authenticated against the Users tab (Active user + AccessCode).
+ *   { action, login, code, ...params }
+ * where login is the person's Username or email address, and is authenticated
+ * against the Users tab (Active user + AccessCode).
  *
  * Actions: login · pull · push · uploadPhoto · leaves · export · dataQuality
  */
@@ -29,7 +30,7 @@ function doPost(e) {
     return json_({ ok: false, error: 'Bad request' });
   }
   try {
-    const user = authenticate_(body.email, body.code);
+    const user = authenticate_(body.login || body.email, body.code);
     switch (body.action) {
       case 'login': return json_({ ok: true, user: publicUser_(user), version: API_VERSION });
       case 'pull': return json_(Object.assign({ ok: true }, pull_(user, body.since)));
@@ -58,12 +59,17 @@ function authError_(msg) {
   return e;
 }
 
-function authenticate_(email, code) {
-  email = String(email || '').trim().toLowerCase();
+/** Sign in with Username or email address (case-insensitive) plus access code. */
+function authenticate_(login, code) {
+  login = String(login || '').trim().toLowerCase();
   code = String(code || '').trim();
-  if (!email || !code) throw authError_('Enter your email and access code.');
-  const user = readTable_('Users').filter(u => String(u.UserEmail).trim().toLowerCase() === email)[0];
-  if (!user || String(user.AccessCode).trim() !== code) throw authError_('Email or access code not recognised.');
+  if (!login || !code) throw authError_('Enter your username and access code.');
+  const users = readTable_('Users').filter(u => String(u.UserEmail || '').trim() !== '');
+  let matches = users.filter(u => String(u.UserEmail).trim().toLowerCase() === login);
+  if (!matches.length) matches = users.filter(u => String(u.Username || '').trim().toLowerCase() === login);
+  if (matches.length > 1) throw authError_('Two people share the username "' + login + '". Ask an administrator to fix the Users tab.');
+  const user = matches[0];
+  if (!user || String(user.AccessCode).trim() !== code) throw authError_('Username or access code not recognised.');
   if (!toBool_(user.Active)) throw authError_('This account is not active. Ask an administrator.');
   if (ROLES.indexOf(user.Role) === -1) throw authError_('This account has no valid role. Ask an administrator.');
   user.UserEmail = String(user.UserEmail).trim();
@@ -71,7 +77,7 @@ function authenticate_(email, code) {
 }
 
 function publicUser_(u) {
-  return { UserEmail: u.UserEmail, UserName: u.UserName, Role: u.Role, Active: toBool_(u.Active) };
+  return { UserEmail: u.UserEmail, Username: String(u.Username || '').trim(), FullName: displayName_(u), Role: u.Role, Active: toBool_(u.Active) };
 }
 
 const isAdmin_ = u => u.Role === 'Administrator';

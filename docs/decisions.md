@@ -7,7 +7,7 @@
 | **Offline-first web app** (installable on tablets, no app store) instead of AppSheet | The client does not use AppSheet. A web app runs on any tablet, laptop or desktop, works fully offline, and is all code, so it can be tested automatically and kept in version control. |
 | **Google Sheets as the database**, with Google Apps Script as the API | Free, familiar, and the data stays readable, filterable and downloadable as a normal spreadsheet. Suits the expected volume of tens of thousands of leaf rows per season. If it outgrows Sheets, only `apps-script/` needs replacing, for example with Supabase. |
 | No build tools or frameworks | Plain HTML, CSS and JS modules. Anyone can host the `app/` folder, and nothing goes stale. |
-| Sign-in by email + per-person access code, checked against the Users tab | Google sign-in cannot be used from a separately hosted app talking to Apps Script without extra Google Cloud setup. Codes are simple to issue and revoke. |
+| Sign-in by **username** (or email) + per-person access code, checked against the Users tab. Email stays the internal link between records, so usernames and names can be changed freely. | Google sign-in cannot be used from a separately hosted app talking to Apps Script without extra Google Cloud setup. Codes are simple to issue and revoke. |
 | Edits are sent as **field-level patches** | Two people changing different fields of the same sample never overwrite each other. |
 | Device keeps everything it needs in IndexedDB; changes are queued in the same transaction as the save | A record cannot be saved without also being queued for upload, so nothing is lost if the app is closed or the tablet restarts (§5.5). |
 | The server recomputes block snapshot, leaf target and season | The sheet is always right even if a device has an old block list. |
@@ -39,4 +39,4 @@ The defaults below are built in. Each can be changed in a few lines.
 | Leaf deletion | Allowed while analysis is in progress (and for admins). The row is kept in the sheet with `Deleted = TRUE` and left out of all results. Remaining leaves keep their numbers. |
 | Draft status | In the status list for completeness, but not used. Saving a sample makes it *Awaiting Analysis* (§5.6). |
 | Two devices entering the same leaf number offline | Both rows are kept (no observation is lost) and the data-quality report flags the duplicate. |
-| Extra columns beyond the spec | `Users.AccessCode`, `Samples.Season`, `Samples.AnalysisStartedBy`, `LastModifiedBy` (Samples, LeafAnalysis), `LeafAnalysis.Deleted`, plus the tabs `AuditLog` and `HelpReference`. |
+| Extra columns beyond the spec | `Users.Username`, `Users.FullName` (instead of `UserName`), `Users.AccessCode`, `Samples.Season`, `Samples.AnalysisStartedBy`, `LastModifiedBy` (Samples, LeafAnalysis), `LeafAnalysis.Deleted`, plus the tabs `AuditLog` and `HelpReference`. |

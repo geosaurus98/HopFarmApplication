@@ -23,7 +23,7 @@ def leaf(sid, n, tsm, pp, e1=0, e2=0, ob=0):
 
 LEAVES = [dict(leaf("s1", 11, 99, 99), Deleted="TRUE"), leaf("s1", 10, 0, 0), leaf("s1", 2, 4, 1, 3), leaf("s1", 1, 6, 1), leaf("s2", 1, 0, 2),
           leaf("orphan", 1, 9, 9)]
-USERS = [{"UserEmail": "c@x.nz", "UserName": "Casey"}, {"UserEmail": "a@x.nz", "UserName": "Alex"}]
+USERS = [{"UserEmail": "c@x.nz", "Username": "casey", "FullName": "Casey"}, {"UserEmail": "a@x.nz", "UserName": "Alex"}]  # old layout still works
 
 
 class FlattenTest(unittest.TestCase):

@@ -33,7 +33,8 @@ export async function api(action, params = {}, creds) {
     res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, email: session.email, code: session.code, ...params }),
+      // Older sessions stored `email`; the server accepts either.
+      body: JSON.stringify({ action, login: session.login || session.email, code: session.code, ...params }),
       redirect: 'follow',
     });
   } catch (e) {

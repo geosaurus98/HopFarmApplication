@@ -25,7 +25,15 @@ you can.
    you wrote it yourself: click *Advanced → Go to …*.
 5. Back in the sheet you will see the tabs **Users, BlockVarieties, Samples,
    LeafAnalysis, AuditLog, HelpReference**, and a pop-up with **your access code**.
-   You are already set up as the Administrator.
+   You are already set up as the Administrator. Your username is the part of
+   your email before the @; change it and your FullName in the Users tab if
+   you like.
+
+> **Already set up with an earlier version?** Paste in the new `Setup.gs` and
+> `Api.gs`, then in the sheet run **Hop Farm → Repair / extend workbook
+> structure**. It adds `Username` and `FullName` to the Users tab and fills them
+> from the email and the old `UserName` column. Check the result, then you can
+> delete the old `UserName` column. Finally publish a new version (step 3).
 
 ## 2. Enter the farm's data (10 min)
 
@@ -46,10 +54,15 @@ variety:
 
 **Users**: one row per person.
 
-| UserEmail | UserName | Role | Active | AccessCode |
-|---|---|---|---|---|
-| sam@nelsonlakeshops.co.nz | Sam | Collector | TRUE | 482913 |
+| UserEmail | Username | FullName | Role | Active | AccessCode |
+|---|---|---|---|---|---|
+| sam@nelsonlakeshops.co.nz | sam | Sam Wilson | Collector | TRUE | 482913 |
 
+- `UserEmail`: the person's email. Used for contact, and behind the scenes to
+  link their samples. Don't change it once they have recorded data.
+- `Username`: what they type to sign in, e.g. `sam`. Must be different for each
+  person; capitals don't matter. Their email address also works for signing in.
+- `FullName`: their real name, shown in the app and in exports.
 - `Role` is **Collector** (field samples only), **Analyst** (leaf analysis and
   exports) or **Administrator** (everything, including corrections to completed
   samples).
@@ -103,7 +116,7 @@ so staff don't have to type it.
 ## 5. Install on each tablet (2 min per device)
 
 1. On the tablet, open the app address in **Chrome** (Android) or **Safari** (iPad).
-2. Sign in with the person's email and access code. Under **Server address**,
+2. Sign in with the person's username and access code. Under **Server address**,
    paste the `/exec` address if it isn't pre-filled.
 3. Install it:
    - Android Chrome: **⋮ → Add to Home screen / Install app**.
@@ -161,7 +174,8 @@ season. Photos are in the Drive folder **Hop Farm Photos**.
 
 | Problem | Fix |
 |---|---|
-| "Email or access code not recognised" | Check the Users row: email spelling, `Active` = TRUE, and the code (no spaces). |
+| "Username or access code not recognised" | Check the Users row: `Username` spelling, `Active` = TRUE, and the code (no spaces). |
+| "Two people share the username" | Give each person a different `Username`. They can still sign in with their email meanwhile. |
 | "Could not reach the server" when online | Check the server address ends in `/exec`, and that the deployment's access is set to *Anyone*. |
 | A change shows "need attention" on the Sync screen | The server refused it, for example because the sample was completed on another device. The message says why. Fix the cause (an admin can **Reopen analysis**) and press **Sync now**, or discard that change. |
 | Script changes have no effect | You need a **new version** of the existing deployment (see step 3). |

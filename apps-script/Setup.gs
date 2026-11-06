@@ -15,7 +15,7 @@
 // Columns are found by header name, so their order in the sheet can change.
 // ---------------------------------------------------------------------------
 const SCHEMA = {
-  Users: ['UserEmail', 'UserName', 'Role', 'Active', 'AccessCode', 'CreatedAt', 'UpdatedAt'],
+  Users: ['UserEmail', 'Username', 'FullName', 'Role', 'Active', 'AccessCode', 'CreatedAt', 'UpdatedAt'],
   BlockVarieties: ['BlockVarietyID', 'Block', 'Variety', 'AreaHa', 'Active', 'Notes', 'UpdatedAt'],
   Samples: [
     'SampleID', 'SampleNumber', 'CollectionDate', 'Season', 'CollectorEmail',
@@ -125,6 +125,7 @@ function setupHopFarmWorkbook() {
   Object.keys(SCHEMA).forEach(name => ensureSheet_(ss, name, SCHEMA[name]));
   applyFormatsAndValidation_(ss);
 
+  migrateUsers_(ss.getSheetByName('Users'));
   const seededUsers = defaultUsers_();
   const addedAdmin = seedIfEmpty_(ss.getSheetByName('Users'), seededUsers);
   seedIfEmpty_(ss.getSheetByName('BlockVarieties'), exampleBlockVarieties_());
@@ -215,6 +216,49 @@ function seedIfEmpty_(sh, rows) {
   return true;
 }
 
+function usernameFromEmail_(email) {
+  return String(email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9._-]+/g, '');
+}
+
+/** Name shown in the app and exports. Falls back to the old UserName column, then the email. */
+function displayName_(u) {
+  return String(u.FullName || u.UserName || u.UserEmail || '').trim();
+}
+
+/**
+ * Upgrade a Users tab from the earlier layout (single UserName column):
+ * fill blank FullName from UserName, and blank Username from the email address
+ * (made unique). Existing values are never overwritten; the old UserName
+ * column is left in place and can be deleted by hand afterwards.
+ */
+function migrateUsers_(sh) {
+  if (!sh || sh.getLastRow() < 2) return;
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const col = h => headers.indexOf(h);
+  const iEmail = col('UserEmail'), iUser = col('Username'), iFull = col('FullName'), iOld = col('UserName');
+  if (iUser === -1 || iFull === -1) return;
+  const range = sh.getRange(2, 1, sh.getLastRow() - 1, headers.length);
+  const rows = range.getValues();
+  const taken = new Set(rows.map(r => String(r[iUser]).trim().toLowerCase()).filter(Boolean));
+  let changed = false;
+  rows.forEach(r => {
+    if (!String(r[iEmail]).trim()) return;
+    if (!String(r[iFull]).trim()) {
+      const old = iOld === -1 ? '' : String(r[iOld]).trim();
+      if (old) { r[iFull] = old; changed = true; }
+    }
+    if (!String(r[iUser]).trim()) {
+      const base = usernameFromEmail_(r[iEmail]) || 'user';
+      let name = base;
+      for (let n = 2; taken.has(name); n++) name = base + n;
+      taken.add(name);
+      r[iUser] = name;
+      changed = true;
+    }
+  });
+  if (changed) range.setValues(rows);
+}
+
 function newAccessCode_() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
@@ -223,7 +267,7 @@ function defaultUsers_() {
   const me = Session.getActiveUser().getEmail();
   const now = new Date();
   return me ? [{
-    UserEmail: me, UserName: me.split('@')[0], Role: 'Administrator', Active: true,
+    UserEmail: me, Username: usernameFromEmail_(me), FullName: me.split('@')[0], Role: 'Administrator', Active: true,
     AccessCode: newAccessCode_(), CreatedAt: now, UpdatedAt: now
   }] : [];
 }
@@ -362,7 +406,7 @@ const SUMMARY_HEADERS = [
 ];
 
 function userNames_() {
-  return readTable_('Users').reduce((m, u) => { m[String(u.UserEmail).toLowerCase()] = u.UserName; return m; }, {});
+  return readTable_('Users').reduce((m, u) => { m[String(u.UserEmail).toLowerCase()] = displayName_(u); return m; }, {});
 }
 
 function nameOf_(names, email) {
@@ -478,6 +522,15 @@ function dataQualityIssues_() {
   const issues = [];
   const add = (sev, table, id, label, issue) => issues.push([sev, table, id, label, issue]);
   const now = new Date();
+
+  const usernames = {};
+  readTable_('Users').forEach(u => {
+    const un = String(u.Username || '').trim().toLowerCase();
+    const label = displayName_(u) + ' <' + u.UserEmail + '>';
+    if (!un) add('WARN', 'Users', u.UserEmail, label, 'Username is blank — this person can only sign in with their email');
+    else if (usernames[un]) add('ERROR', 'Users', u.UserEmail, label, 'Username "' + un + '" is also used by ' + usernames[un] + ' — neither can sign in with it');
+    else usernames[un] = u.UserEmail;
+  });
 
   blocks.forEach(b => {
     if (!(Number(b.AreaHa) > 0)) add('ERROR', 'BlockVarieties', b.BlockVarietyID, b.Block + ' - ' + b.Variety, 'Area missing or not greater than zero');

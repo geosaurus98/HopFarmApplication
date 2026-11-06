@@ -1,7 +1,7 @@
 // Local server for development and end-to-end tests:
 //   static files from app/  +  POST /api handled by the real Apps Script code (in memory).
 // Usage: node tests/support/dev-server.js [port]   then open http://localhost:<port>
-//        Sign in with server address "/api", e.g. lab@farm.nz / 333333.
+//        Sign in with server address "/api", e.g. username lee / code 333333.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');

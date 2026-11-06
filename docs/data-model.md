@@ -15,7 +15,8 @@ figures are calculated from the leaf rows; nothing is pre-aggregated.
 | Column | Type | Notes |
 |---|---|---|
 | UserEmail | Email, **key** | Google sign-in address |
-| UserName | Text | Displayed instead of the email |
+| Username | Text | Typed to sign in; unique, not case-sensitive (email also works) |
+| FullName | Text | Real name, shown in the app and exports |
 | Role | `Collector` / `Analyst` / `Administrator` | Drives views, actions and update permissions |
 | Active | TRUE/FALSE | Inactive users cannot sign in; their history stays |
 | AccessCode | Text | The code the person types to sign in (never sent to devices) |

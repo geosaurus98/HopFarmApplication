@@ -20,9 +20,9 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_INTERNET_DISCONNECTED/.test(m.text())) errors.push(m.text()); });
   const shot = async (name) => { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 
-  async function signIn(email, code) {
+  async function signIn(login, code) {
     await page.goto(`${url}/#/login`);
-    await page.fill('#email', email);
+    await page.fill('#login', login);
     await page.fill('#code', code);
     if (await page.isVisible('#apiUrl') === false) await page.click('summary:has-text("Server address")');
     await page.fill('#apiUrl', '/api');
@@ -34,14 +34,14 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.goto(`${url}/#/sync`);
     await page.click('button:has-text("Sign out")');
     await page.click('dialog button:has-text("Sign out")');
-    await page.waitForSelector('#email');
+    await page.waitForSelector('#login');
   }
 
   try {
     // Wrong code is refused with a clear message.
     await page.goto(url);
-    await page.waitForSelector('#email');
-    await page.fill('#email', 'col@farm.nz');
+    await page.waitForSelector('#login');
+    await page.fill('#login', 'cole');
     await page.fill('#code', '999999');
     assert.match(await page.inputValue('#apiUrl'), /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/, 'farm server is the default');
     await page.click('summary:has-text("Server address")');
@@ -50,7 +50,7 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.waitForSelector('text=not recognised');
 
     // ---- Stage 1: field collection (collector) ----
-    await signIn('col@farm.nz', '222222');
+    await signIn('cole', '222222');
     assert.equal(await page.isVisible('text=Analyse Samples'), false, 'collectors do not see analysis');
     await page.waitForSelector('#syncBadge:has-text("All synced")');
     await page.evaluate(() => navigator.serviceWorker.ready);
@@ -105,7 +105,7 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await signOut();
 
     // ---- Stage 2: office analysis (analyst) ----
-    await signIn('lab@farm.nz', '333333');
+    await signIn('Lee', '333333');
     await page.click('text=Analyse Samples');
     await page.waitForSelector('.sample-card:has-text("1042")');
     assert.doesNotMatch(await page.textContent('main'), /\bnull\b|\bundefined\b/, 'no stray null/undefined text');
@@ -224,7 +224,8 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
 
     // ---- Admin can reopen; changes to completed samples are audited ----
     await signOut();
-    await signIn('admin@farm.nz', '111111');
+    await signIn('admin@farm.nz', '111111'); // email also works
+    assert.ok(await page.isVisible('text=Ana Admin · Administrator'));
     await page.goto(`${url}/#/sample/${done.SampleID}`);
     await page.click('.leaf-table tbody tr:nth-child(1)');
     await page.fill('#TetranychusCount', '5');
