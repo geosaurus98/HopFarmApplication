@@ -46,9 +46,24 @@ The farm's chart, with exact colours taken from it:
 The score (1–7) is what's stored and exported. In the app each swatch is a large
 tap target showing its number, so the choice doesn't rely on colour alone.
 
+## Where the data lives
+
+Plant health data goes in its **own Google Sheet** ("Hop Farm – Plant Health"),
+separate from the mite sheet ("Hop Farm Data"). It is still the same app, with one
+sign-in:
+
+- The existing Apps Script opens the plant sheet by its ID (a single setting,
+  `PLANT_HEALTH_SHEET_ID`) and writes the Plants, PlantMilestones and
+  PlantInspections tabs there.
+- Users, roles and the block list stay in the mite sheet, so staff are managed in
+  one place. Each user gets access to Mite Monitoring, Plant Health or both.
+- Each sheet can be shared with different people. The script owner needs edit
+  access to both.
+- Exports, version history and season archiving are per sheet.
+
 ## Proposed design
 
-**Sheet tabs**, separate from the mite data:
+**Tabs in the Plant Health sheet:**
 
 | Tab | One row per | Columns |
 |---|---|---|
