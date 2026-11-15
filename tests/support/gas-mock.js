@@ -55,7 +55,7 @@ function makeBook(id, tz) {
   return book;
 }
 
-function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz' } = {}) {
+function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder = ['Setup.gs', 'Api.gs'] } = {}) {
   const books = {};
   const newBook = (id) => (books[id] = makeBook(id, tz));
   const ss = newBook('MITE_SHEET_ID_0000000000000000');
@@ -116,7 +116,8 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz' } = {}) {
   };
 
   const dir = path.join(__dirname, '..', '..', 'apps-script');
-  const src = ['Setup.gs', 'Api.gs'].map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+  // Apps Script runs files in the editor's order, which the user controls; test both orders.
+  const src = fileOrder.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   const exportsList = ['setupHopFarmWorkbook', 'connectSetupSheet_', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
     'doGet', 'doPost', 'requiredLeaves', 'seasonOf', 'weekStarting', 'SCHEMA', 'REPORT_TABS', 'LEAF_EXPORT_HEADERS', 'SUMMARY_HEADERS'];
   const gs = new Function(...Object.keys(globals), `${src}\n;return {${exportsList.join(',')}};`)(...Object.values(globals));

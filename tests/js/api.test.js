@@ -461,3 +461,22 @@ test('split: refuses a target sheet that already has data, changing nothing', ()
   assert.ok(g.ss.getSheetByName('Users'), 'original tabs untouched');
   assert.equal(g.post({ action: 'login', login: 'lee', code: '333333' }).ok, true);
 });
+
+test('works whichever order Apps Script loads Setup.gs and Api.gs', () => {
+  for (const fileOrder of [['Setup.gs', 'Api.gs'], ['Api.gs', 'Setup.gs']]) {
+    const g = createSeededGas({ fileOrder });
+    assert.equal(g.post({ action: 'login', login: 'lee', code: '333333' }).ok, true, fileOrder.join(' then '));
+    const r = push(g, LAB, [newSample('sample-0001', { CollectorEmail: 'lab@farm.nz' }), newLeaf('leaf-00001', 'sample-0001', 1, counts(1, 2, 3, 4, 5))]);
+    assert.ok(r.results.every((x) => x.ok), JSON.stringify(r.results));
+    const [leaf] = g.table('LeafAnalysis');
+    assert.deepEqual([leaf.TetranychusCount, leaf.PhytoseiulusCount, leaf.TwoSpotEggCount, leaf.PredatorEggCount, leaf.OtherBeneficialCount], [1, 2, 3, 4, 5]);
+  }
+});
+
+test('every count field is writable by the API', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'apps-script', 'Api.gs'), 'utf8');
+  const block = /LeafAnalysis: \[([\s\S]*?)\]\s*\n\};/.exec(src)[1];
+  for (const f of ['PhytoseiulusCount', 'TetranychusCount', 'PredatorEggCount', 'TwoSpotEggCount', 'OtherBeneficialCount']) {
+    assert.ok(block.includes(`'${f}'`), f);
+  }
+});

@@ -137,8 +137,11 @@ const WRITABLE = {
     'AreaHaAtCollection', 'TargetLeafCount', 'SampleComments', 'SamplePhoto1', 'SamplePhoto2', 'Status',
     'AnalysisStartedAt', 'AnalysisStartedBy', 'AnalysisCompletedAt', 'CompletedBy', 'ActualLeafCount',
     'AnalysisComments', 'EarlyCompletionReason', 'CreatedAt'],
-  LeafAnalysis: ['SampleID', 'LeafNumber', 'AnalystEmail', 'AnalysisDateTime'].concat(COUNT_FIELDS,
-    ['OtherBeneficialDescription', 'LeafComment', 'LeafPhoto', 'Deleted', 'CreatedAt'])
+  // Listed in full (not built from Setup.gs's COUNT_FIELDS): Apps Script may load
+  // Api.gs before Setup.gs, so nothing here may use Setup.gs values at load time.
+  LeafAnalysis: ['SampleID', 'LeafNumber', 'AnalystEmail', 'AnalysisDateTime',
+    'PhytoseiulusCount', 'TetranychusCount', 'PredatorEggCount', 'TwoSpotEggCount', 'OtherBeneficialCount',
+    'OtherBeneficialDescription', 'LeafComment', 'LeafPhoto', 'Deleted', 'CreatedAt']
 };
 
 const SNAPSHOT_FIELDS = ['BlockVarietyID', 'Block', 'Variety', 'AreaHaAtCollection', 'TargetLeafCount'];
