@@ -207,6 +207,12 @@ test('plant check: sections, edit rights, series and stage timeline', () => {
     { BlockVarietyID: 'A1', Block: 'A1', Variety: 'Cascade', InspectionDate: '2026-10-27', GrowthStage: S[2], AvgBineHeightCm: 150, Deleted: true },
   ];
   assert.deepEqual(L.plantSeries(checks, 'C2', 'AvgBineHeightCm').map((p) => [p.date, p.value]), [['2026-10-13', 20], ['2026-10-20', 80]]);
+  const sameDay = [
+    { BlockVarietyID: 'K2', InspectionDate: '2026-11-03', Row: 5, Bay: 9, AvgBineHeightCm: 3 },
+    { BlockVarietyID: 'K2', InspectionDate: '2026-11-03', Row: 5, Bay: 2, AvgBineHeightCm: 2 },
+    { BlockVarietyID: 'K2', InspectionDate: '2026-11-03', Row: 1, Bay: 7, AvgBineHeightCm: 1 },
+  ];
+  assert.deepEqual(L.plantSeries(sameDay, 'K2', 'AvgBineHeightCm').map((p) => p.value), [1, 2, 3], 'same day: by row, then bay');
   const tl = L.stageTimeline(checks);
   assert.equal(tl.length, 1, 'deleted check ignored');
   assert.deepEqual(tl[0].firstSeen.slice(0, 3), ['2026-10-13', '2026-10-20', '']);

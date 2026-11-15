@@ -1227,12 +1227,16 @@ async function viewUserForm(id) {
 // ---------------------------------------------------------------------------
 // Sync, account and troubleshooting
 // ---------------------------------------------------------------------------
+let lastSyncResult = null;
+
 async function viewSync() {
   const outbox = await db.getAll('outbox');
   const photos = await db.getAll('photos');
   const st = getStatus();
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
-  const msg = h('p', { class: 'muted', 'aria-live': 'polite' });
+  // The result of the last "Sync now" stays visible after the screen refreshes (for a minute).
+  const msg = h('p', { class: 'muted', 'aria-live': 'polite', id: 'syncMsg' },
+    lastSyncResult && Date.now() - lastSyncResult.at < 60000 ? lastSyncResult.text : '');
   const syncBtn = h('button', {
     class: 'btn primary big', type: 'button', id: 'syncNow', onclick: async () => {
       syncBtn.disabled = true;
@@ -1243,6 +1247,7 @@ async function viewSync() {
       } catch (e) {
         msg.textContent = e instanceof AuthError ? `${e.message} Sign out and sign in again (your waiting changes are kept if you sign back in as the same person).` : e.message;
       }
+      lastSyncResult = { text: msg.textContent, at: Date.now() };
       await refreshCounts();
       // Refresh the Sync screen only if the user is still on it; never redraw another screen.
       setTimeout(() => { if (location.hash === '#/sync') render(); }, 800);

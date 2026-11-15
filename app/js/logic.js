@@ -501,7 +501,7 @@ export function plantSeries(checks, blockVarietyId, field, season = '') {
       (!season || (c.Season || seasonOf(c.InspectionDate)) === season) &&
       c[field] !== '' && c[field] !== null && c[field] !== undefined && Number.isFinite(Number(c[field])))
     .map((c) => ({ date: c.InspectionDate, check: c, value: Number(c[field]) }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => a.date.localeCompare(b.date) || Number(a.check.Row) - Number(b.check.Row) || Number(a.check.Bay) - Number(b.check.Bay));
 }
 
 /** First date each growth stage was recorded, per block (for the stage timeline). */
