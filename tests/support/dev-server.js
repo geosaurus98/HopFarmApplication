@@ -11,7 +11,7 @@ const APP_DIR = path.join(__dirname, '..', '..', 'app');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 
 function startServer(port = 0) {
-  const g = createSeededGas();
+  const g = createSeededGas({ split: true }); // Users & Setup in its own sheet, as deployed
   const server = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/api') {
       let body = '';

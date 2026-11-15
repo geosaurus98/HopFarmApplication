@@ -32,6 +32,15 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     if (err) throw new Error(`Sign-in as ${login} failed: ${err}`);
   }
 
+  // Press Sync now and wait for this sync run to finish (the badge alone can still show
+  // "All synced" from before the change was counted).
+  async function syncNow() {
+    await page.goto(`${url}/#/sync`);
+    await page.click('#syncNow');
+    await page.waitForSelector('text=Sync complete.', { timeout: 15000 });
+    await page.waitForSelector('#syncBadge:has-text("All synced")', { timeout: 15000 });
+  }
+
   async function signOut() {
     await page.goto(`${url}/#/sync`);
     await page.click('button:has-text("Sign out")');
@@ -184,8 +193,7 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     assert.equal(await page.isVisible('text=Resume at leaf'), false);
 
     await page.goto(`${url}/#/sync`);
-    await page.click('#syncNow');
-    await page.waitForSelector('#syncBadge:has-text("All synced")', { timeout: 15000 });
+    await syncNow();
     const leaves = g.table('LeafAnalysis').sort((a, b) => a.LeafNumber - b.LeafNumber);
     assert.deepEqual(leaves.map((l) => l.LeafNumber), [1, 2, 3]);
     assert.deepEqual(leaves.map((l) => l.TetranychusCount), [4, 2, 150]);
@@ -244,8 +252,7 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.click('button:has-text("Save changes")');
     await page.waitForSelector('#leavesAnalysed');
     await page.goto(`${url}/#/sync`);
-    await page.click('#syncNow');
-    await page.waitForSelector('#syncBadge:has-text("All synced")', { timeout: 15000 });
+    await syncNow();
     const audit = g.table('AuditLog');
     assert.equal(audit.length, 1);
     assert.match(audit[0].Summary, /TetranychusCount: 4 → 5/);
@@ -297,8 +304,7 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.waitForSelector('#syncBadge:has-text("1 waiting to upload")', { timeout: 15000 });
     server.apiDown = false;
     await page.goto(`${url}/#/sync`);
-    await page.click('#syncNow');
-    await page.waitForSelector('#syncBadge:has-text("All synced")', { timeout: 15000 });
+    await syncNow();
     assert.equal(g.table('Samples').find((s) => s.SampleNumber === 1042).Status, 'Analysis In Progress');
 
     // Help shows the identification poster, also offline.

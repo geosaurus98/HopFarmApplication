@@ -93,6 +93,37 @@ To add a picture to a help item:
 Drive pictures need internet to show; the built-in poster does not. To replace
 the poster, swap `app/help/mite-control-poster.webp` and publish the app again.
 
+## 2b. Keep users in their own sheet (recommended)
+
+This keeps everyone's access codes out of the data sheet, so you can share the
+mite results with people without showing them the codes. The app doesn't change;
+staff won't notice anything.
+
+| Sheet | Holds |
+|---|---|
+| **Hop Farm Data** (the one the script is attached to) | Mite monitoring: Samples, LeafAnalysis, AuditLog, exports |
+| **Hop Farm – Users & Setup** (new) | Users (with access codes), BlockVarieties, HelpReference, and a log of user changes |
+| **Hop Farm – Plant Health** (later) | Plant health data, when that section is built |
+
+1. Create a new, empty Google Sheet with the **same Google account** that owns
+   the script, and name it **Hop Farm – Users & Setup**. Copy its address from
+   the browser address bar.
+2. In **Hop Farm Data**, choose **Hop Farm → Connect Users & Setup sheet…** and
+   paste the address. (Google may ask you to approve one more permission, to let
+   the script open the other sheet.)
+3. The script copies the Users, BlockVarieties and HelpReference tabs across and
+   checks every value matches. Only then does it switch the app over. If anything
+   doesn't match, nothing is switched and it tells you why.
+4. The old tabs in Hop Farm Data are renamed **OLD … (moved – delete)** and
+   hidden. Open the new sheet and check it looks right, then delete those three
+   old tabs (**View → Hidden sheets** to show them first). Until you delete them,
+   the old copy of the access codes is still in Hop Farm Data.
+5. Share each sheet only with the people who need it. Keep **Users & Setup** to
+   yourself and other administrators.
+
+From then on, edit users and blocks in **Hop Farm – Users & Setup**, or use
+**Manage Users** in the app.
+
 ## 3. Publish the API (3 min)
 
 In the Apps Script editor: **Deploy → New deployment → ⚙ → Web app**

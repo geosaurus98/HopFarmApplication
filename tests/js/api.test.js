@@ -400,3 +400,64 @@ test('admins add and edit users; rules are enforced and changes audited', () => 
     'Added as Administrator', 'Username: bob → bobby; FullName: Bob Boss → Bob B; AccessCode changed']);
   assert.ok(audit.every((x) => !/765432/.test(x)), 'codes never written to the audit log');
 });
+
+test('split: Users, blocks and help move to a separate Users & Setup sheet', () => {
+  const g = createSeededGas();
+  push(g, LAB, [newSample('sample-0001', { CollectorEmail: 'lab@farm.nz' })]);
+  // Extra column from an older layout must survive the move.
+  const users = g.sheets.Users;
+  users.data[0].push('UserName');
+  users.data.slice(1).forEach((r) => r.push('legacy'));
+
+  const setup = g.newBook('SETUP_SHEET_ID_000000000000000');
+  assert.throws(() => g.gs.connectSetupSheet_('not a url'), /does not look like a Google Sheets address/);
+  assert.throws(() => g.gs.connectSetupSheet_(`https://docs.google.com/spreadsheets/d/${g.ss.getId()}/edit`), /That is this sheet/);
+  assert.throws(() => g.gs.connectSetupSheet_('https://docs.google.com/spreadsheets/d/UNKNOWN_SHEET_00000000000/edit'), /Could not open/);
+
+  const msg = g.gs.connectSetupSheet_('https://docs.google.com/spreadsheets/d/SETUP_SHEET_ID_000000000000000/edit#gid=0');
+  assert.match(msg, /Users: 4 rows copied and checked/);
+  assert.match(msg, /BlockVarieties: 39 rows copied and checked/);
+  assert.equal(g.props.SETUP_SHEET_ID, 'SETUP_SHEET_ID_000000000000000');
+
+  // Old tabs renamed and hidden in the mite sheet; samples stay put.
+  assert.equal(g.ss.getSheetByName('Users'), null);
+  const old = g.ss.getSheetByName('OLD Users (moved – delete)');
+  assert.ok(old && old.isSheetHidden());
+  assert.ok(g.ss.getSheetByName('Samples'));
+  assert.equal(setup.getSheetByName('Samples'), null);
+  assert.equal(g.table('Users', setup).length, 4);
+  assert.equal(g.table('Users', setup)[0].UserName, 'legacy');
+
+  // Everything now reads and writes the new sheet.
+  assert.equal(g.post({ action: 'login', login: 'lee', code: '333333' }).ok, true);
+  assert.equal(g.post({ action: 'pull', ...LAB }).blocks.length, 39);
+  const added = g.post({ action: 'saveUser', ...ADMIN, isNew: true, user: { UserEmail: 'sam@farm.nz', Username: 'sam', FullName: 'Sam', Role: 'Collector' } });
+  assert.equal(added.ok, true, added.error);
+  assert.equal(g.table('Users', setup).length, 5);
+  assert.equal(g.table('AuditLog', setup).length, 1, 'user changes logged in the Users & Setup sheet');
+  assert.equal(g.table('AuditLog', g.ss).length, 0);
+  assert.equal(push(g, LAB, [newSample('sample-0002', { CollectorEmail: 'lab@farm.nz', SampleNumber: 7 })]).results[0].ok, true);
+  assert.equal(g.table('Samples', g.ss).length, 2);
+
+  // Repair does not recreate Users etc. in the mite sheet; exports still resolve names.
+  g.gs.setupHopFarmWorkbook();
+  assert.equal(g.ss.getSheetByName('Users'), null);
+  assert.equal(g.ss.getSheetByName('BlockVarieties'), null);
+  g.gs.buildSampleSummary();
+  assert.equal(g.table('Export_SampleSummary', g.ss).length, 2);
+
+  // Connecting again is harmless; a different sheet is refused.
+  assert.match(g.gs.connectSetupSheet_('SETUP_SHEET_ID_000000000000000'), /already connected/);
+  g.newBook('ANOTHER_SHEET_ID_0000000000000');
+  assert.throws(() => g.gs.connectSetupSheet_('ANOTHER_SHEET_ID_0000000000000'), /different Users & Setup sheet is already connected/);
+});
+
+test('split: refuses a target sheet that already has data, changing nothing', () => {
+  const g = createSeededGas();
+  const setup = g.newBook('SETUP_SHEET_ID_000000000000000');
+  setup.insertSheet('Users').getRange(1, 1, 2, 2).setValues([['UserEmail', 'Username'], ['x@y.nz', 'x']]);
+  assert.throws(() => g.gs.connectSetupSheet_('SETUP_SHEET_ID_000000000000000'), /already has data in "Users"/);
+  assert.equal(g.props.SETUP_SHEET_ID, undefined);
+  assert.ok(g.ss.getSheetByName('Users'), 'original tabs untouched');
+  assert.equal(g.post({ action: 'login', login: 'lee', code: '333333' }).ok, true);
+});

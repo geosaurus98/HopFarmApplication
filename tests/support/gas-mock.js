@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-function makeSheet(name) {
+function makeSheet(name, book) {
   const data = [];
   const rangeOps = { setFontWeight: () => rangeOps, setBackground: () => rangeOps };
   const sh = {
@@ -25,25 +25,41 @@ function makeSheet(name) {
         },
         setValue: (v) => { (data[r - 1] = data[r - 1] || [])[c - 1] = v; return range; },
         setFontWeight: () => range, setBackground: () => range, setNumberFormat: () => range, setDataValidation: () => range,
+        clearContent: () => { for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) if (data[r - 1 + i]) data[r - 1 + i][c - 1 + j] = ''; return range; },
       };
       return range;
     },
     setFrozenRows: () => {}, clearContents: () => { data.length = 0; }, activate: () => {},
+    hidden: false,
+    hideSheet: () => { sh.hidden = true; return sh; },
+    isSheetHidden: () => sh.hidden,
+    setName: (n) => { if (book) { delete book.sheets[sh.name]; book.sheets[n] = sh; } sh.name = n; return sh; },
   };
   return sh;
 }
 
-function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz' } = {}) {
-  const sheets = {};
-  const ss = {
-    getSheetByName: (n) => sheets[n] || null,
-    insertSheet: (n) => (sheets[n] = makeSheet(n)),
-    getSheets: () => Object.values(sheets),
-    deleteSheet: (s) => delete sheets[s.name],
-    toast: (msg) => { ss.lastToast = msg; },
+/** An in-memory spreadsheet ("book"). */
+function makeBook(id, tz) {
+  const book = {
+    id,
+    sheets: {},
+    getId: () => id,
+    getSheetByName: (n) => book.sheets[n] || null,
+    insertSheet: (n) => (book.sheets[n] = makeSheet(n, book)),
+    getSheets: () => Object.values(book.sheets),
+    deleteSheet: (s) => delete book.sheets[s.name],
+    toast: (msg) => { book.lastToast = msg; },
     getSpreadsheetTimeZone: () => tz,
   };
-  sheets.Sheet1 = makeSheet('Sheet1');
+  book.sheets.Sheet1 = makeSheet('Sheet1', book);
+  return book;
+}
+
+function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz' } = {}) {
+  const books = {};
+  const newBook = (id) => (books[id] = makeBook(id, tz));
+  const ss = newBook('MITE_SHEET_ID_0000000000000000');
+  const sheets = ss.sheets;
   const builder = new Proxy({}, { get: (t, k) => (k === 'build' ? () => ({}) : () => builder) });
 
   const files = [];
@@ -66,7 +82,12 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz' } = {}) {
   const props = {};
 
   const globals = {
-    SpreadsheetApp: { getActive: () => ss, newDataValidation: () => builder, getUi: () => ({}) },
+    SpreadsheetApp: {
+      getActive: () => ss,
+      openById: (id) => { if (!books[id]) throw new Error('Not found'); return books[id]; },
+      newDataValidation: () => builder,
+      getUi: () => ({}),
+    },
     Session: { getActiveUser: () => ({ getEmail: () => user }), getScriptTimeZone: () => tz },
     ContentService: {
       MimeType: { JSON: 'application/json' },
@@ -96,24 +117,29 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz' } = {}) {
 
   const dir = path.join(__dirname, '..', '..', 'apps-script');
   const src = ['Setup.gs', 'Api.gs'].map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
-  const exportsList = ['setupHopFarmWorkbook', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
+  const exportsList = ['setupHopFarmWorkbook', 'connectSetupSheet_', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
     'doGet', 'doPost', 'requiredLeaves', 'seasonOf', 'weekStarting', 'SCHEMA', 'REPORT_TABS', 'LEAF_EXPORT_HEADERS', 'SUMMARY_HEADERS'];
   const gs = new Function(...Object.keys(globals), `${src}\n;return {${exportsList.join(',')}};`)(...Object.values(globals));
 
-  const table = (name) => {
-    const d = sheets[name].data;
+  // Tabs are looked up in whichever spreadsheet now holds them.
+  const bookOf = (name) => Object.values(books).find((b) => b.sheets[name] && b !== ss && ['Users', 'BlockVarieties', 'HelpReference'].includes(name) && props.SETUP_SHEET_ID === b.id) || ss;
+  const table = (name, book) => {
+    const d = (book || bookOf(name)).sheets[name].data;
     const headers = d[0];
     return d.slice(1).filter((r) => r && r.some((v) => v !== '' && v != null))
       .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] === undefined ? '' : r[i]]).filter(([h]) => h !== undefined && h !== '' && !String(h).startsWith('Generated'))));
   };
-  const addRow = (name, obj) => { const h = sheets[name].data[0]; sheets[name].data.push(h.map((k) => (k in obj ? obj[k] : ''))); };
+  const addRow = (name, obj, book) => { const t = (book || bookOf(name)).sheets[name]; const h = t.data[0]; t.data.push(h.map((k) => (k in obj ? obj[k] : ''))); };
   const post = (body) => JSON.parse(gs.doPost({ postData: { contents: JSON.stringify(body) } }).getContent());
 
-  return { gs, ss, sheets, table, addRow, post, files };
+  return { gs, ss, sheets, books, newBook, bookOf, props, table, addRow, post, files };
 }
 
-/** A workbook with the standard test users and example blocks. */
-function createSeededGas(opts) {
+/**
+ * A workbook with the standard test users and the farm's blocks.
+ * split: true moves Users, blocks and help into a separate Users & Setup sheet (as deployed).
+ */
+function createSeededGas(opts = {}) {
   const g = createGas(opts);
   g.gs.setupHopFarmWorkbook();
   g.sheets.Users.data.length = 1; // replace the auto-created admin with known users
@@ -121,6 +147,10 @@ function createSeededGas(opts) {
   [['admin@farm.nz', 'ana', 'Ana Admin', 'Administrator', '111111'], ['col@farm.nz', 'cole', 'Cole Collector', 'Collector', '222222'],
     ['lab@farm.nz', 'lee', 'Lee Analyst', 'Analyst', '333333'], ['gone@farm.nz', 'old', 'Old Staff', 'Analyst', '444444', false]]
     .forEach(([e, u, n, r, c, active = true]) => g.addRow('Users', { UserEmail: e, Username: u, FullName: n, Role: r, Active: active, AccessCode: c, CreatedAt: now, UpdatedAt: now }));
+  if (opts.split) {
+    g.setup = g.newBook('SETUP_SHEET_ID_000000000000000');
+    g.gs.connectSetupSheet_('https://docs.google.com/spreadsheets/d/SETUP_SHEET_ID_000000000000000/edit');
+  }
   return g;
 }
 

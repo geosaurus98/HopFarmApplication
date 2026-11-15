@@ -179,7 +179,7 @@ function push_(user, ops) {
 
 /** In-memory view of a sheet that writes back only changed or new rows. */
 function openTable_(name) {
-  const sh = SpreadsheetApp.getActive().getSheetByName(name);
+  const sh = ssFor_(name).getSheetByName(name);
   const lastCol = sh.getLastColumn();
   const lastRow = sh.getLastRow();
   const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
@@ -215,8 +215,9 @@ function openTable_(name) {
   };
 }
 
-function appendRows_(name, objs) {
-  const sh = SpreadsheetApp.getActive().getSheetByName(name);
+/** Append rows to a tab. `book` defaults to this (Mite Monitoring) spreadsheet. */
+function appendRows_(name, objs, book) {
+  const sh = (book || SpreadsheetApp.getActive()).getSheetByName(name);
   const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
   sh.getRange(sh.getLastRow() + 1, 1, objs.length, headers.length)
     .setValues(objs.map(o => headers.map(h => (h in o ? o[h] : ''))));
@@ -510,10 +511,11 @@ function saveUser_(admin, input, isNew) {
           .map(f => f + ': ' + before[f] + ' → ' + rec[f])
           .concat(String(before.AccessCode) !== String(rec.AccessCode) ? ['AccessCode changed'] : [])
       : ['Added as ' + rec.Role];
+    // User changes are logged alongside the users (in the Users & Setup sheet when connected).
     appendRows_('AuditLog', [{
       AuditID: Utilities.getUuid(), TableName: 'Users', RowID: email, ChangedBy: admin.UserEmail,
       ChangedAt: now, Summary: changes.join('; ') || '(no change)'
-    }]);
+    }], ssFor_('Users'));
     return { user: adminUser_(rec) };
   } finally {
     lock.releaseLock();

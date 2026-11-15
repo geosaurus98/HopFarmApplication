@@ -35,6 +35,37 @@ const SCHEMA = {
   HelpReference: ['HelpID', 'Category', 'Title', 'Description', 'Image', 'SortOrder']
 };
 
+// ---------------------------------------------------------------------------
+// Where each tab lives. Once a separate "Users & Setup" sheet is connected
+// (Hop Farm → Connect Users & Setup sheet…), these tabs are read from and
+// written to that sheet; everything else stays in this (Mite Monitoring)
+// sheet. Until then, everything is in this sheet.
+// ---------------------------------------------------------------------------
+const SETUP_TABLES = ['Users', 'BlockVarieties', 'HelpReference'];
+const SETUP_SHEET_PROP = 'SETUP_SHEET_ID';
+let setupSsCache_ = null;
+
+function setupSheetId_() {
+  return PropertiesService.getScriptProperties().getProperty(SETUP_SHEET_PROP) || '';
+}
+
+/** The connected Users & Setup spreadsheet, or null if not connected. */
+function setupSs_() {
+  const id = setupSheetId_();
+  if (!id) return null;
+  if (!setupSsCache_ || setupSsCache_.getId() !== id) setupSsCache_ = SpreadsheetApp.openById(id);
+  return setupSsCache_;
+}
+
+/** The spreadsheet that holds a given tab. */
+function ssFor_(table) {
+  if (SETUP_TABLES.indexOf(table) !== -1) {
+    const s = setupSs_();
+    if (s) return s;
+  }
+  return SpreadsheetApp.getActive();
+}
+
 const KEYS = {
   Users: 'UserEmail', BlockVarieties: 'BlockVarietyID', Samples: 'SampleID',
   LeafAnalysis: 'LeafAnalysisID', AuditLog: 'AuditID', HelpReference: 'HelpID'
@@ -114,6 +145,7 @@ function onOpen() {
     .addItem('Run data quality report', 'buildDataQualityReport')
     .addSeparator()
     .addItem('Repair / extend workbook structure', 'setupHopFarmWorkbook')
+    .addItem('Connect Users & Setup sheet…', 'connectSetupSheet')
     .addToUi();
 }
 
@@ -122,17 +154,22 @@ function onOpen() {
 // ---------------------------------------------------------------------------
 function setupHopFarmWorkbook() {
   const ss = SpreadsheetApp.getActive();
-  Object.keys(SCHEMA).forEach(name => ensureSheet_(ss, name, SCHEMA[name]));
-  applyFormatsAndValidation_(ss);
+  const setup = setupSs_();
+  Object.keys(SCHEMA).forEach(name => ensureSheet_(ssFor_(name), name, SCHEMA[name]));
+  if (setup) ensureSheet_(setup, 'AuditLog', SCHEMA.AuditLog); // log of changes to users
+  applyFormatsAndValidation_();
 
-  migrateUsers_(ss.getSheetByName('Users'));
+  const usersSh = ssFor_('Users').getSheetByName('Users');
+  migrateUsers_(usersSh);
   const seededUsers = defaultUsers_();
-  const addedAdmin = seedIfEmpty_(ss.getSheetByName('Users'), seededUsers);
-  seedIfEmpty_(ss.getSheetByName('BlockVarieties'), exampleBlockVarieties_());
-  seedIfEmpty_(ss.getSheetByName('HelpReference'), helpContent_());
+  const addedAdmin = seedIfEmpty_(usersSh, seededUsers);
+  seedIfEmpty_(ssFor_('BlockVarieties').getSheetByName('BlockVarieties'), exampleBlockVarieties_());
+  seedIfEmpty_(ssFor_('HelpReference').getSheetByName('HelpReference'), helpContent_());
 
-  const sheet1 = ss.getSheetByName('Sheet1');
-  if (sheet1 && sheet1.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(sheet1);
+  [ss, setup].forEach(book => {
+    const sheet1 = book && book.getSheetByName('Sheet1');
+    if (sheet1 && sheet1.getLastRow() === 0 && book.getSheets().length > 1) book.deleteSheet(sheet1);
+  });
 
   ss.toast(addedAdmin && seededUsers.length
     ? 'Workbook ready. Your app access code is ' + seededUsers[0].AccessCode + ' (see the Users tab).'
@@ -169,7 +206,8 @@ function columnRange_(sh, header) {
 }
 
 /** Protects data when someone edits the sheet by hand. The API validates too. */
-function applyFormatsAndValidation_(ss) {
+function applyFormatsAndValidation_() {
+  const tab = name => ssFor_(name).getSheetByName(name);
   const nonNegInt = SpreadsheetApp.newDataValidation()
     .requireFormulaSatisfied('=OR(ISBLANK(INDIRECT("RC",FALSE)),AND(ISNUMBER(INDIRECT("RC",FALSE)),INDIRECT("RC",FALSE)>=0,INDIRECT("RC",FALSE)=INT(INDIRECT("RC",FALSE))))')
     .setAllowInvalid(false)
@@ -183,17 +221,17 @@ function applyFormatsAndValidation_(ss) {
   const roleList = SpreadsheetApp.newDataValidation()
     .requireValueInList(ROLES, true).setAllowInvalid(false).build();
 
-  const leaf = ss.getSheetByName('LeafAnalysis');
+  const leaf = tab('LeafAnalysis');
   COUNT_FIELDS.concat(['LeafNumber']).forEach(h =>
     columnRange_(leaf, h).setNumberFormat('0').setDataValidation(nonNegInt));
   ['AnalysisDateTime', 'CreatedAt', 'UpdatedAt'].forEach(h =>
     columnRange_(leaf, h).setNumberFormat('yyyy-mm-dd hh:mm:ss'));
 
-  const bv = ss.getSheetByName('BlockVarieties');
+  const bv = tab('BlockVarieties');
   columnRange_(bv, 'AreaHa').setNumberFormat('0.00').setDataValidation(positive);
   columnRange_(bv, 'UpdatedAt').setNumberFormat('yyyy-mm-dd hh:mm:ss');
 
-  const samples = ss.getSheetByName('Samples');
+  const samples = tab('Samples');
   columnRange_(samples, 'Status').setDataValidation(statusList);
   columnRange_(samples, 'CollectionDate').setNumberFormat('yyyy-mm-dd');
   columnRange_(samples, 'AreaHaAtCollection').setNumberFormat('0.00');
@@ -202,7 +240,7 @@ function applyFormatsAndValidation_(ss) {
   ['AnalysisStartedAt', 'AnalysisCompletedAt', 'CreatedAt', 'UpdatedAt'].forEach(h =>
     columnRange_(samples, h).setNumberFormat('yyyy-mm-dd hh:mm:ss'));
 
-  const users = ss.getSheetByName('Users');
+  const users = tab('Users');
   columnRange_(users, 'Role').setDataValidation(roleList);
   columnRange_(users, 'AccessCode').setNumberFormat('@');
 }
@@ -364,7 +402,14 @@ function tz_() {
 
 /** Raw rows (Date objects etc.) as objects keyed by header. */
 function readTable_(name) {
-  const sh = SpreadsheetApp.getActive().getSheetByName(name);
+  return readSheetObjects_(ssFor_(name).getSheetByName(name));
+}
+
+function headersOf_(sh) {
+  return sh.getLastColumn() ? sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0] : [];
+}
+
+function readSheetObjects_(sh) {
   if (!sh || sh.getLastRow() < 2) return [];
   const values = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
   const headers = values.shift();
@@ -625,3 +670,99 @@ function groupBy_(rows, key) {
 }
 
 function round_(x) { return Math.round(x * 1000) / 1000; }
+
+// ---------------------------------------------------------------------------
+// Moving Users, blocks and help into a separate "Users & Setup" sheet.
+// Copies, checks the copy, and only then switches over. The original tabs are
+// renamed "OLD … (moved – delete)" and hidden, never deleted by the script.
+// ---------------------------------------------------------------------------
+function connectSetupSheet() {
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt('Connect Users & Setup sheet',
+    'Create a new, empty Google Sheet (e.g. "Hop Farm – Users & Setup") and paste its address here.\n\n' +
+    'Users, blocks and help text will be copied into it and checked. Samples and leaves stay in this sheet.',
+    ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  try {
+    ui.alert('Users & Setup sheet connected', connectSetupSheet_(res.getResponseText()), ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Not connected', e.message, ui.ButtonSet.OK);
+  }
+}
+
+function sheetIdFromUrl_(text) {
+  const s = String(text || '').trim();
+  const m = /\/d\/([a-zA-Z0-9_-]{20,})/.exec(s);
+  if (m) return m[1];
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return s;
+  throw new Error('That does not look like a Google Sheets address. Copy it from the browser address bar of the new sheet.');
+}
+
+/** Returns a summary for the user. Throws (changing nothing) if anything looks wrong. */
+function connectSetupSheet_(urlOrId) {
+  const main = SpreadsheetApp.getActive();
+  const id = sheetIdFromUrl_(urlOrId);
+  if (id === main.getId()) throw new Error('That is this sheet. Create a new, separate Google Sheet for Users & Setup.');
+  const current = setupSheetId_();
+  if (current === id) return 'This sheet is already connected. Nothing changed.';
+  if (current) throw new Error('A different Users & Setup sheet is already connected. Nothing changed.');
+  let dest;
+  try {
+    dest = SpreadsheetApp.openById(id);
+  } catch (e) {
+    throw new Error('Could not open that sheet. Check the address, and that this Google account can edit it.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // 1. Check everything before changing anything.
+    const plan = SETUP_TABLES.map(name => {
+      const src = main.getSheetByName(name);
+      const srcRows = readSheetObjects_(src);
+      if (srcRows.length && readSheetObjects_(dest.getSheetByName(name)).length) {
+        throw new Error('The new sheet already has data in "' + name + '". Use an empty sheet. Nothing changed.');
+      }
+      return { name: name, src: src, srcRows: srcRows, srcHeaders: src ? headersOf_(src).filter(h => h !== '') : [] };
+    });
+
+    // 2. Copy (keeping any extra columns) and check the copy matches exactly.
+    const summary = [];
+    plan.forEach(p => {
+      const sh = ensureSheet_(dest, p.name, SCHEMA[p.name]);
+      const extra = p.srcHeaders.filter(h => headersOf_(sh).indexOf(h) === -1);
+      if (extra.length) sh.getRange(1, headersOf_(sh).filter(h => h !== '').length + 1, 1, extra.length).setValues([extra]);
+      const headers = headersOf_(sh);
+      if (p.srcRows.length) {
+        sh.getRange(2, 1, p.srcRows.length, headers.length)
+          .setValues(p.srcRows.map(o => headers.map(h => (h in o ? o[h] : ''))));
+      }
+      const copied = readSheetObjects_(sh);
+      const same = copied.length === p.srcRows.length && copied.every((o, i) =>
+        p.srcHeaders.every(h => String(o[h]) === String(p.srcRows[i][h])));
+      if (!same) {
+        sh.getRange(2, 1, Math.max(1, sh.getLastRow() - 1), headers.length).clearContent();
+        throw new Error('The copy of "' + p.name + '" did not match. Nothing was switched over; this sheet is unchanged.');
+      }
+      summary.push('• ' + p.name + ': ' + p.srcRows.length + ' row' + (p.srcRows.length === 1 ? '' : 's') + ' copied and checked');
+    });
+    ensureSheet_(dest, 'AuditLog', SCHEMA.AuditLog);
+
+    // 3. Switch over, then retire the old tabs.
+    PropertiesService.getScriptProperties().setProperty(SETUP_SHEET_PROP, id);
+    setupSsCache_ = null;
+    plan.forEach(p => {
+      if (!p.src) return;
+      p.src.setName('OLD ' + p.name + ' (moved – delete)');
+      p.src.hideSheet();
+    });
+    setupHopFarmWorkbook(); // formats and validation in the new sheet; seeds any empty tab
+
+    return summary.join('\n') +
+      '\n\nThe app now reads users, blocks and help from the new sheet.' +
+      '\n\nThe old tabs here were renamed "OLD … (moved – delete)" and hidden. Check the new sheet, then delete them ' +
+      '(View → Hidden sheets) so the access codes are no longer in this file.';
+  } finally {
+    lock.releaseLock();
+  }
+}

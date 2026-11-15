@@ -55,8 +55,8 @@ sign-in:
 - The existing Apps Script opens the plant sheet by its ID (a single setting,
   `PLANT_HEALTH_SHEET_ID`) and writes the Plants, PlantMilestones and
   PlantInspections tabs there.
-- Users, roles and the block list stay in the mite sheet, so staff are managed in
-  one place. Each user gets access to Mite Monitoring, Plant Health or both.
+- Users, roles and the block list are in the shared **Users & Setup** sheet, so
+  staff and blocks are managed in one place for both sections. Each user gets access to Mite Monitoring, Plant Health or both.
 - Each sheet can be shared with different people. The script owner needs edit
   access to both.
 - Exports, version history and season archiving are per sheet.

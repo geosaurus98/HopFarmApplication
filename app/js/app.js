@@ -1195,7 +1195,8 @@ async function viewSync() {
         msg.textContent = e instanceof AuthError ? `${e.message} Sign out and sign in again (your waiting changes are kept if you sign back in as the same person).` : e.message;
       }
       await refreshCounts();
-      setTimeout(render, 800);
+      // Refresh the Sync screen only if the user is still on it; never redraw another screen.
+      setTimeout(() => { if (location.hash === '#/sync') render(); }, 800);
     },
   }, 'Sync now');
 

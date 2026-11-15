@@ -13,6 +13,12 @@
 | The server recomputes block snapshot, leaf target and season | The sheet is always right even if a device has an old block list. |
 | Leaves for samples older than about 13 months are not cached on devices | Keeps tablets fast as seasons accumulate. They download on demand when a sample is opened online. Full history is always in the Sheet and the CSV exports. |
 
+## Data storage
+
+| Decision | Reason |
+|---|---|
+| **Separate Google Sheets:** *Users & Setup* (users, access codes, blocks, help), *Hop Farm Data* (mite monitoring), and later *Plant Health*. One app and one sign-in. | Access codes stay private when data sheets are shared. Each data set can be shared, exported and archived on its own. The block list and users are maintained in one place for both sections. |
+
 ## Client answers (Jason Johnson, July 2026)
 
 | Question | Answer | In the app |
