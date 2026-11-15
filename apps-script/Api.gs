@@ -80,7 +80,15 @@ function authenticate_(login, code) {
 }
 
 function publicUser_(u) {
-  return { UserEmail: u.UserEmail, Username: String(u.Username || '').trim(), FullName: displayName_(u), Role: u.Role, Active: toBool_(u.Active) };
+  return {
+    UserEmail: u.UserEmail, Username: String(u.Username || '').trim(), FullName: displayName_(u),
+    Role: u.Role, Sections: userSections_(u), Active: toBool_(u.Active)
+  };
+}
+
+/** Can this user use a section ('Mites' or 'Plant Health')? Administrators can use all. */
+function hasSection_(u, section) {
+  return isAdmin_(u) || userSections_(u).indexOf(section) !== -1;
 }
 
 const isAdmin_ = u => u.Role === 'Administrator';
@@ -99,12 +107,21 @@ function pull_(user, since) {
   const sinceTime = since ? new Date(since).getTime() - PULL_OVERLAP_MS : null;
   const changed = r => sinceTime === null || !(r.UpdatedAt instanceof Date) || r.UpdatedAt.getTime() > sinceTime;
 
-  const samplesRaw = readTable_('Samples');
+  const mites = hasSection_(user, 'Mites');
+  const plants = hasSection_(user, 'Plant Health');
+  const cutoff = now.getTime() - INITIAL_LEAF_HISTORY_DAYS * 86400000;
+
+  const samplesRaw = mites ? readTable_('Samples') : [];
   const samples = samplesRaw.filter(changed).map(serializeRow_);
 
-  let leavesRaw = readTable_('LeafAnalysis').filter(changed);
+  let plantRaw = plants ? readTable_('PlantChecks').filter(changed) : [];
   if (sinceTime === null) {
-    const cutoff = now.getTime() - INITIAL_LEAF_HISTORY_DAYS * 86400000;
+    plantRaw = plantRaw.filter(c => !toBool_(c.Deleted) &&
+      (!(c.InspectionDate instanceof Date) || c.InspectionDate.getTime() >= cutoff));
+  }
+
+  let leavesRaw = mites ? readTable_('LeafAnalysis').filter(changed) : [];
+  if (sinceTime === null) {
     const recent = new Set(samplesRaw
       .filter(s => !(s.CollectionDate instanceof Date) || s.CollectionDate.getTime() >= cutoff)
       .map(s => s.SampleID));
@@ -118,7 +135,8 @@ function pull_(user, since) {
     blocks: readTable_('BlockVarieties').map(serializeRow_),
     help: readTable_('HelpReference').map(serializeRow_),
     samples: samples,
-    leaves: leavesRaw.map(serializeRow_)
+    leaves: leavesRaw.map(serializeRow_),
+    plantChecks: plantRaw.map(serializeRow_)
   };
 }
 
@@ -141,7 +159,12 @@ const WRITABLE = {
   // Api.gs before Setup.gs, so nothing here may use Setup.gs values at load time.
   LeafAnalysis: ['SampleID', 'LeafNumber', 'AnalystEmail', 'AnalysisDateTime',
     'PhytoseiulusCount', 'TetranychusCount', 'PredatorEggCount', 'TwoSpotEggCount', 'OtherBeneficialCount',
-    'OtherBeneficialDescription', 'LeafComment', 'LeafPhoto', 'Deleted', 'CreatedAt']
+    'OtherBeneficialDescription', 'LeafComment', 'LeafPhoto', 'Deleted', 'CreatedAt'],
+  PlantChecks: ['InspectionDate', 'InspectionTime', 'InspectorEmail', 'BlockVarietyID', 'Row', 'Bay',
+    'BineHealth', 'CoirStatus', 'WeedPressure', 'GrassLength', 'TrellisIntegrity', 'IrrigationLeaks', 'OverviewPhoto',
+    'GrowthStage', 'BinesTrained', 'AvgBineHeightCm', 'MaxBineHeightCm', 'InternodeUnder1mCm', 'Internode1to2mCm',
+    'Internode2to3mCm', 'AvgLateralLengthCm', 'SnappedTipsBine', 'SnappedTipsLateral', 'OverallBineHealth',
+    'LeafColour', 'LeafSize', 'LeafDamage', 'LeafPhoto1', 'LeafPhoto2', 'Comments', 'Deleted', 'CreatedAt']
 };
 
 const SNAPSHOT_FIELDS = ['BlockVarietyID', 'Block', 'Variety', 'AreaHaAtCollection', 'TargetLeafCount'];
@@ -160,6 +183,7 @@ function push_(user, ops) {
   try {
     const now = new Date();
     const tables = { Samples: openTable_('Samples'), LeafAnalysis: openTable_('LeafAnalysis') };
+    if (ops.some(op => op.table === 'PlantChecks')) tables.PlantChecks = openTable_('PlantChecks');
     const blocks = readTable_('BlockVarieties').reduce((m, b) => { m[b.BlockVarietyID] = b; return m; }, {});
     const results = [];
     const audits = [];
@@ -173,6 +197,7 @@ function push_(user, ops) {
     });
     tables.Samples.flush();
     tables.LeafAnalysis.flush();
+    if (tables.PlantChecks) tables.PlantChecks.flush();
     if (audits.length) appendRows_('AuditLog', audits);
     return { results: results, serverTime: now.toISOString() };
   } finally {
@@ -239,10 +264,14 @@ function applyOp_(user, op, tables, blocks, now, audits) {
     patch[f] = deserializeValue_(f, op.patch[f]);
   });
 
+  const section = op.table === 'PlantChecks' ? 'Plant Health' : 'Mites';
+  if (!hasSection_(user, section)) throw new Error('Your account does not have access to ' + (section === 'Mites' ? 'Mite Monitoring' : section) + '.');
+
   const existing = table.get(id);
   const before = existing ? Object.assign({}, existing) : null;
 
   if (op.table === 'Samples') authorizeSample_(user, before, patch);
+  else if (op.table === 'PlantChecks') authorizePlant_(user, before, patch);
   else authorizeLeaf_(user, before, patch, tables.Samples);
 
   const rec = existing || {};
@@ -253,6 +282,7 @@ function applyOp_(user, op, tables, blocks, now, audits) {
   Object.keys(patch).forEach(f => { if (f !== 'CreatedAt' || !existing) rec[f] = patch[f]; });
 
   if (op.table === 'Samples') finaliseSample_(rec, before, patch, blocks, user);
+  else if (op.table === 'PlantChecks') finalisePlant_(rec, before, patch, blocks, user, table);
   else validateLeaf_(rec, tables.Samples);
 
   rec.UpdatedAt = now;
@@ -396,7 +426,7 @@ function uploadPhoto_(user, body) {
   if (!/^[A-Za-z0-9_-]{6,64}$/.test(id)) throw new Error('Invalid photo id');
   const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(String(body.dataUrl || ''));
   if (!m) throw new Error('Photo must be a JPEG, PNG or WebP image.');
-  const sub = body.kind === 'leaf' ? 'Leaves' : 'Samples';
+  const sub = body.kind === 'leaf' ? 'Leaves' : body.kind === 'plant' ? 'Plant Health' : 'Samples';
   const folder = photoFolder_(sub);
   const name = id + (m[1] === 'image/png' ? '.png' : m[1] === 'image/webp' ? '.webp' : '.jpg');
   const existing = folder.getFilesByName(name);
@@ -425,10 +455,15 @@ function photoFolder_(sub) {
 // Export: CSV text for Excel
 // ---------------------------------------------------------------------------
 function export_(user, body) {
-  if (!isLab_(user)) throw new Error('Only analysts and administrators can export.');
   const filter = { season: body.season || '', blockVarietyId: body.blockVarietyId || '' };
   const suffix = (filter.season ? '_' + filter.season.replace('/', '-') : '_all-seasons') +
     '_' + Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
+  if (body.type === 'plant') {
+    if (!hasSection_(user, 'Plant Health')) throw new Error('Your account does not have access to Plant Health.');
+    const rows = plantExportRows_(filter);
+    return { csv: toCsv_(PLANT_EXPORT_HEADERS, rows), rows: rows.length, filename: 'hopfarm_plant_checks' + suffix + '.csv' };
+  }
+  if (!isLab_(user) || !hasSection_(user, 'Mites')) throw new Error('Only analysts and administrators can export mite data.');
   if (body.type === 'summary') {
     const rows = sampleSummaryRows_(filter);
     return { csv: toCsv_(SUMMARY_HEADERS, rows), rows: rows.length, filename: 'hopfarm_sample_summary' + suffix + '.csv' };
@@ -487,6 +522,10 @@ function saveUser_(admin, input, isNew) {
     if (!fullName) throw new Error('Enter the person\'s full name.');
     if (ROLES.indexOf(input.Role) === -1) throw new Error('Choose a role.');
     const active = input.Active === undefined ? true : toBool_(input.Active);
+    const sectionsIn = Array.isArray(input.Sections) ? input.Sections
+      : String(input.Sections || '').split(',').map(x => x.trim()).filter(Boolean);
+    const sections = SECTIONS.filter(x => sectionsIn.indexOf(x) !== -1);
+    if (input.Sections !== undefined && !sections.length) throw new Error('Choose at least one section (Mite Monitoring or Plant Health).');
 
     let code = String(input.AccessCode || '').trim();
     if (!code && isNew) code = newAccessCode_();
@@ -503,13 +542,14 @@ function saveUser_(admin, input, isNew) {
     rec.FullName = fullName;
     rec.Role = input.Role;
     rec.Active = active;
+    if (input.Sections !== undefined || !existing) rec.Sections = (sections.length ? sections : SECTIONS).join(', ');
     if (code) rec.AccessCode = code;
     rec.UpdatedAt = now;
     if (existing) table.touch(rec); else table.insert(rec);
     table.flush();
 
     const changes = before
-      ? ['Username', 'FullName', 'Role', 'Active']
+      ? ['Username', 'FullName', 'Role', 'Sections', 'Active']
           .filter(f => String(before[f]) !== String(rec[f]))
           .map(f => f + ': ' + before[f] + ' → ' + rec[f])
           .concat(String(before.AccessCode) !== String(rec.AccessCode) ? ['AccessCode changed'] : [])
@@ -522,5 +562,90 @@ function saveUser_(admin, input, isNew) {
     return { user: adminUser_(rec) };
   } finally {
     lock.releaseLock();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Plant Health checks: one record per bay (7 plants) per visit
+// ---------------------------------------------------------------------------
+const PLANT_EDIT_DAYS = 31;
+
+/** People record checks under their own name and can correct their own for 31 days; admins any time. */
+function authorizePlant_(user, before, patch) {
+  if (isAdmin_(user)) return;
+  const self = user.UserEmail.toLowerCase();
+  if (!before) {
+    if (patch.InspectorEmail && String(patch.InspectorEmail).toLowerCase() !== self) {
+      throw new Error('You can only record plant checks under your own name.');
+    }
+    return;
+  }
+  if (String(before.InspectorEmail).toLowerCase() !== self) {
+    throw new Error('You can only change your own plant checks. Ask an administrator.');
+  }
+  const t = before.CreatedAt instanceof Date ? before.CreatedAt.getTime() : NaN;
+  if (!(Date.now() - t <= PLANT_EDIT_DAYS * 86400000)) {
+    throw new Error('This plant check is more than ' + PLANT_EDIT_DAYS + ' days old. Only an administrator can change it now.');
+  }
+}
+
+function plantNumber_(rec, field, label, min, max, whole) {
+  const v = rec[field];
+  if (v === '' || v === null || v === undefined) { rec[field] = ''; return; }
+  const n = Number(v);
+  if (!isFinite(n) || n < min || n > max || (whole && n !== Math.floor(n))) {
+    throw new Error(label + ' must be ' + (whole ? 'a whole number ' : 'a number ') + 'from ' + min + ' to ' + max + '.');
+  }
+  rec[field] = whole ? n : Math.round(n * 10) / 10;
+}
+
+function finalisePlant_(rec, before, patch, blocks, user, table) {
+  if (!rec.InspectorEmail) rec.InspectorEmail = user.UserEmail;
+  if (!(rec.InspectionDate instanceof Date)) throw new Error('Inspection date is required.');
+  rec.Season = seasonOf(isoDate_(rec.InspectionDate));
+  if (!before || ('BlockVarietyID' in patch && patch.BlockVarietyID !== before.BlockVarietyID)) {
+    const b = blocks[rec.BlockVarietyID];
+    if (!b) throw new Error('Choose the block and variety.');
+    if (!before && !toBool_(b.Active)) throw new Error('That block and variety is no longer active.');
+    rec.Block = b.Block;
+    rec.Variety = b.Variety;
+  }
+  rec.Deleted = toBool_(rec.Deleted);
+  if (!rec.Deleted) {
+    ['Row', 'Bay'].forEach(f => {
+      const n = Number(rec[f]);
+      if (rec[f] === '' || !(n >= 1) || n !== Math.floor(n)) throw new Error(f + ' # must be a whole number from 1.');
+      rec[f] = n;
+    });
+    if (rec.InspectionTime !== '' && rec.InspectionTime !== undefined && !/^\d{1,2}:\d{2}$/.test(String(rec.InspectionTime))) {
+      throw new Error('Inspection time must look like 14:30.');
+    }
+    Object.keys(PLANT_OPTIONS).forEach(f => {
+      if (f === 'LeafDamage') return;
+      const v = rec[f] === undefined ? '' : String(rec[f]);
+      if (f === 'GrowthStage' && !v) throw new Error('Choose the current growth stage.');
+      if (v && PLANT_OPTIONS[f].indexOf(v) === -1) throw new Error('"' + v + '" is not a choice for ' + f + '.');
+    });
+    const damage = String(rec.LeafDamage || '').split(',').map(x => x.trim()).filter(Boolean);
+    damage.forEach(d => { if (PLANT_OPTIONS.LeafDamage.indexOf(d) === -1) throw new Error('"' + d + '" is not a leaf damage choice.'); });
+    rec.LeafDamage = PLANT_OPTIONS.LeafDamage.filter(d => damage.indexOf(d) !== -1).join(', ');
+    plantNumber_(rec, 'BinesTrained', 'Number of bines trained', 0, MAX_BINES_PER_BAY, true);
+    plantNumber_(rec, 'AvgBineHeightCm', 'Average bine height', 0, 1000, false);
+    plantNumber_(rec, 'MaxBineHeightCm', 'Maximum bine height', 0, 1000, false);
+    plantNumber_(rec, 'InternodeUnder1mCm', 'Internode spacing <1 m', 0, 100, false);
+    plantNumber_(rec, 'Internode1to2mCm', 'Internode spacing 1–2 m', 0, 100, false);
+    plantNumber_(rec, 'Internode2to3mCm', 'Internode spacing 2–3 m', 0, 100, false);
+    plantNumber_(rec, 'AvgLateralLengthCm', 'Average lateral length', 0, 500, false);
+    plantNumber_(rec, 'SnappedTipsBine', 'Snapped bine tips', 0, 1000, true);
+    plantNumber_(rec, 'SnappedTipsLateral', 'Snapped lateral tips', 0, 1000, true);
+    plantNumber_(rec, 'LeafColour', 'Leaf colour', 1, LEAF_COLOUR_STEPS, true);
+    if (rec.MaxBineHeightCm !== '' && rec.AvgBineHeightCm !== '' && rec.MaxBineHeightCm < rec.AvgBineHeightCm) {
+      throw new Error('Maximum bine height cannot be less than the average.');
+    }
+  }
+  // Record number: next in the season, assigned by the server so devices never clash.
+  if (!before) {
+    const nums = table.rows.filter(r => r !== rec && r.Season === rec.Season).map(r => Number(r.RecordNumber) || 0);
+    rec.RecordNumber = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
   }
 }

@@ -2,8 +2,9 @@ import * as db from './db.js';
 import * as L from './logic.js';
 import { STATUS, COUNT_FIELDS, can } from './logic.js';
 import { api, sync, syncSoon, onStatus, refreshCounts, startAutoSync, fetchLeaves, AuthError, OfflineError, getStatus } from './sync.js';
-import { h, svg, mount, toast, confirmDialog, fmtDate, fmtDateTime, fmtAgo, pct, download, field, statusPill, progressBar } from './ui.js';
+import { h, svg, mount, toast, confirmDialog, fmtDate, fmtDateTime, fmtAgo, pct, download, field, statusPill, progressBar, clearErrorsOnEdit } from './ui.js';
 import { DEFAULT_API_URL, APP_VERSION } from './config.js';
+import { initPlant, plantRoutes } from './plant.js';
 
 const main = () => document.getElementById('main');
 let session = null; // { apiUrl, login, code, user: { UserEmail, Username, FullName, Role } }
@@ -29,6 +30,9 @@ async function boot() {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   watchForUpdates();
+  initPlant({
+    main, go, render: () => render(), session: () => session, userNames, photoInput, photoView, notFound, weekBars, displayName,
+  });
   // Ask the browser not to evict our data under storage pressure.
   navigator.storage?.persist?.().catch(() => {});
 
@@ -122,6 +126,7 @@ const routes = [
   [/^#\/users$/, viewUsers],
   [/^#\/user\/([^/]+)$/, (id) => viewUserForm(decodeURIComponent(id))],
   [/^#\/sync$/, viewSync],
+  ...plantRoutes,
 ];
 
 // Renders run one after another, so a slow screen can never overwrite a newer one.
@@ -227,17 +232,35 @@ async function viewHome() {
     h('span', { class: 'tile-title' }, title), h('span', { class: 'tile-sub' }, sub),
     badge !== null && badge !== undefined ? h('span', { class: 'tile-badge' }, String(badge)) : null);
 
+  const mites = L.hasSection(session.user, 'Mites');
+  const plants = L.hasSection(session.user, 'Plant Health');
+  const plantChecks = plants ? (await db.getAll('plantChecks')).filter((c) => !L.toBoolean(c.Deleted)) : [];
+  const myPlantWeek = plantChecks.filter((c) => String(c.InspectorEmail).toLowerCase() === me().toLowerCase() && c.InspectionDate >= daysAgo(7)).length;
+  const heading = (text) => h('h2', { class: 'section-heading' }, text);
+
   mount(main(),
+    mites ? [
+      plants ? heading('Mite Monitoring') : null,
+      h('div', { class: 'tiles' },
+        tile('#/new', 'New Mite Sample', 'Record a sample bag in the field', null, 'primary'),
+        tile('#/samples/mine', 'My Recent Samples', 'Collected by you in the last 14 days', mine),
+        can(role(), 'analyse') && tile('#/samples/queue', 'Analyse Samples', 'Waiting for leaf analysis', count(STATUS.AWAITING)),
+        can(role(), 'analyse') && tile('#/samples/progress', 'Samples In Progress', 'Resume a paused analysis', count(STATUS.IN_PROGRESS)),
+        tile('#/samples/completed', 'Completed Samples', 'Search historical results', count(STATUS.COMPLETE)),
+        tile('#/reports', 'Mite Reports', 'Trends and CSV files for Excel'),
+        can(role(), 'admin') && tile('#/samples/all', 'All Samples (admin)', 'Including cancelled samples', samples.length)),
+    ] : null,
+    plants ? [
+      mites ? heading('Plant Health') : null,
+      h('div', { class: 'tiles' },
+        tile('#/plant/new', 'New Plant Check', 'Weekly check of a bay (7 plants)', null, 'primary'),
+        tile('#/plants', 'Plant Checks', 'Your checks this week', myPlantWeek),
+        tile('#/plant-reports', 'Plant Reports', 'Growth, stages and CSV for Excel')),
+    ] : null,
+    heading(''),
     h('div', { class: 'tiles' },
-      tile('#/new', 'New Mite Sample', 'Record a sample bag in the field', null, 'primary'),
-      tile('#/samples/mine', 'My Recent Samples', 'Collected by you in the last 14 days', mine),
-      can(role(), 'analyse') && tile('#/samples/queue', 'Analyse Samples', 'Waiting for leaf analysis', count(STATUS.AWAITING)),
-      can(role(), 'analyse') && tile('#/samples/progress', 'Samples In Progress', 'Resume a paused analysis', count(STATUS.IN_PROGRESS)),
-      tile('#/samples/completed', 'Completed Samples', 'Search historical results', count(STATUS.COMPLETE)),
-      tile('#/reports', 'Reports and Exports', 'Trends and CSV files for Excel'),
-      tile('#/help', 'Help and Reference', 'Identification guide and how-to'),
-      can(role(), 'admin') && tile('#/users', 'Manage Users', 'Add collectors, analysts and administrators'),
-      can(role(), 'admin') && tile('#/samples/all', 'All Samples (admin)', 'Including cancelled samples', samples.length)));
+      tile('#/help', 'Help and Reference', 'Identification guides and how-to'),
+      can(role(), 'admin') && tile('#/users', 'Manage Users', 'Add people and choose what they can use')));
 }
 
 function daysAgo(n) {
@@ -322,6 +345,7 @@ async function viewSampleForm(id) {
   const targetBox = h('div', { class: 'target-box', 'aria-live': 'polite' });
   const dupBox = h('div', { class: 'warning', hidden: true });
   const form = h('form', { class: 'card', novalidate: true });
+  clearErrorsOnEdit(form);
 
   function currentBlock() {
     return blocks.find((b) => b.BlockVarietyID === blockSel.value);
@@ -969,7 +993,9 @@ function weekBars(points, measure) {
   const bw = Math.max(3, Math.min(32, band - 2));
   const base = H - pad.b;
   const sy = (v) => base - (v / max) * (H - pad.t - pad.b);
-  const describe = (p) => `${fmtDate(p.date)} · bag ${p.sample.SampleNumber}: ${fmtNum(p.value)} ${measure.short} per leaf`;
+  const describe = (p) => (p.label
+    ? `${fmtDate(p.date)} · ${p.label}: ${fmtNum(p.value)} ${measure.short}`
+    : `${fmtDate(p.date)} · bag ${p.sample.SampleNumber}: ${fmtNum(p.value)} ${measure.short} per leaf`);
   const readout = h('div', { class: 'chart-readout', 'aria-live': 'polite' }, `Latest: ${describe(points[n - 1])}`);
   const every = Math.ceil(n / 7);
   const bars = [];
@@ -1031,6 +1057,14 @@ function niceCeil(v) {
 // ---------------------------------------------------------------------------
 // Help (§9.7)
 // ---------------------------------------------------------------------------
+/** Reference pictures from the farm's crop monitoring workbook (Photos tab). */
+const PLANT_HELP = [
+  ['nitrogen', 'Nitrogen'], ['nitrogen-1', 'Nitrogen (2)'], ['phosphorus', 'Phosphorus'], ['potassium', 'Potassium'],
+  ['potassium-1', 'Potassium (2)'], ['calcium', 'Calcium'], ['magnesium', 'Magnesium'], ['sulphur', 'Sulphur'],
+  ['boron', 'Boron'], ['chlorine', 'Chlorine'], ['copper', 'Copper'], ['iron', 'Iron'], ['manganese', 'Manganese'],
+  ['molybdenum', 'Molybdenum'], ['zinc', 'Zinc'], ['hop-aphids', 'Hop aphids'],
+];
+
 async function viewHelp() {
   const items = (await db.getAll('help')).sort((a, b) => Number(a.SortOrder) - Number(b.SortOrder));
   const groups = L.groupBy(items, 'Category');
@@ -1041,6 +1075,11 @@ async function viewHelp() {
       h('p', { class: 'muted small' }, 'Tap the poster to open it full size and zoom in.'),
       h('a', { href: 'help/mite-control-poster.webp', target: '_blank', rel: 'noopener' },
         h('img', { class: 'help-poster', src: 'help/mite-control-poster.webp', alt: 'Mite control in hops poster: the plant damage, the pest two-spotted spider mite (badies), the predatory mite Phytoseiulus persimilis (goodies), and other beneficials — ladybird, predatory thrips and lacewing.' }))),
+    L.hasSection(session.user, 'Plant Health') ? h('section', { class: 'card' },
+      h('h2', {}, 'Plant health — nutrient deficiencies and pests'),
+      h('p', { class: 'muted small' }, 'Tap a picture to open it full size.'),
+      h('div', { class: 'help-gallery' }, PLANT_HELP.map(([file, title]) => h('a', { href: `help/plant/${file}.jpg`, target: '_blank', rel: 'noopener', class: 'help-thumb' },
+        h('img', { src: `help/plant/${file}.jpg`, alt: title, loading: 'lazy' }), h('span', {}, title))))) : null,
     items.length ? [...groups].map(([cat, rows]) => h('section', { class: 'card' },
       h('h2', {}, cat),
       rows.map((r) => h('details', { class: 'help-item' },
@@ -1078,7 +1117,8 @@ async function viewUsers() {
     h('div', { class: 'list' }, users.map((u) => h('a', { class: `sample-card${u.Active ? '' : ' inactive'}`, href: `#/user/${encodeURIComponent(u.UserEmail)}` },
       h('div', { class: 'grow' },
         h('div', { class: 'title' }, displayName(u)),
-        h('div', { class: 'muted small' }, `${u.Username || '(no username)'} · ${u.UserEmail}`)),
+        h('div', { class: 'muted small' }, `${u.Username || '(no username)'} · ${u.UserEmail}`),
+        h('div', { class: 'small' }, u.Role === 'Administrator' ? 'Everything' : L.userSections(u).map((x) => (x === 'Mites' ? 'Mite Monitoring' : x)).join(' + '))),
       h('div', { class: 'right' },
         h('span', { class: `pill ${u.Active ? 'role' : 'cancelled'}` }, u.Active ? u.Role : `${u.Role} — no access`))))));
 }
@@ -1100,6 +1140,11 @@ async function viewUserForm(id) {
   const email = h('input', { id: 'UserEmail', type: 'email', value: u.UserEmail, disabled: !isNew, autocomplete: 'off' });
   const roleSel = h('select', { id: 'Role', disabled: isSelf || readOnly }, L.ROLES.map((r) => h('option', { value: r, selected: u.Role === r }, r)));
   const active = h('input', { id: 'Active', type: 'checkbox', checked: !!u.Active, disabled: isSelf || readOnly, class: 'checkbox' });
+  const userSecs = L.userSections({ ...u, Role: 'x' }); // as stored; admins see everything anyway
+  const secBoxes = L.SECTIONS.map((sec) => h('input', {
+    type: 'checkbox', class: 'checkbox', id: `section-${sec.replace(/\s+/g, '')}`, value: sec, checked: userSecs.includes(sec), disabled: readOnly,
+  }));
+  const secLabel = { Mites: 'Mite Monitoring', 'Plant Health': 'Plant Health' };
   const code = h('input', { id: 'AccessCode', type: 'text', inputmode: 'numeric', value: u.AccessCode || '', placeholder: isNew ? 'Leave blank to generate one' : '', autocomplete: 'off', readonly: readOnly });
   const msg = h('p', { class: 'error', role: 'alert' });
   const saveBtn = h('button', { class: 'btn primary big', type: 'submit' }, isNew ? 'Add user' : 'Save changes');
@@ -1132,6 +1177,7 @@ async function viewUserForm(id) {
         user: {
           UserEmail: email.value.trim(), Username: username.value.trim(), FullName: fullName.value.trim(),
           Role: roleSel.value, Active: active.checked, AccessCode: code.value.trim(),
+          Sections: secBoxes.filter((b) => b.checked).map((b) => b.value),
         },
       });
       const { AccessCode, ...pub } = user;
@@ -1165,7 +1211,10 @@ async function viewUserForm(id) {
           field('Username', username, { hint: 'What they type to sign in. Letters, numbers, dots or dashes; no spaces.' }),
           field('Email', email, { hint: isNew ? 'Their email address. It cannot be changed later.' : 'Cannot be changed — their samples are linked to it.' })),
         h('div', {},
-          field('Role', roleSel),
+          h('div', { class: 'field' }, h('label', {}, 'Can use'),
+            secBoxes.map((b) => h('label', { class: 'check-row', for: b.id }, b, h('span', {}, secLabel[b.value]))),
+            h('div', { class: 'hint' }, 'Administrators can always use everything.')),
+          field('Role in Mite Monitoring', roleSel),
           roleHint,
           h('label', { class: 'check-row', for: 'Active' }, active, h('span', {}, 'Can sign in')),
           isSelf ? h('p', { class: 'muted small' }, 'You cannot change your own role or remove your own access.') : null,

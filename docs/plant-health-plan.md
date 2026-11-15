@@ -1,94 +1,80 @@
-# Plant Health Monitoring: Plan
+# Plant Health Monitoring
 
-Status: **design agreed in outline, waiting on answers from Jason before building.**
-It will be a separate section of the same app, as Jason asked: one app, mites first,
-plant health later, different people, data not plotted together.
+Status: **built (app version 1.2.0)**, following Jason's paper form "Hop Plant Weekly
+Monitoring Report" (Version 1, Nov 2026, `Crop_monitoring_Forms_2026.xlsx`).
 
-## What is recorded (from Jason)
+## How it works
 
-Season: **October to April**. The same plants are visited every week, **14 plants
-per block**, identified by block, **row** and plant number.
+- **One plant check = one bay** (the 7 plants between two posts) on one visit,
+  located by **block/variety, Row # and Bay # (from south)**.
+- **Inspector, date and time** fill in automatically from the sign-in.
+- The **server numbers records per season** (e.g. *2026/27 #5*), like the paper
+  form's record numbers, so two tablets never clash.
+- Works **offline** and syncs later, like mite samples.
+- The person who made a check can correct it for **31 days**. Administrators can
+  change any check.
+- Each user can be given **Mite Monitoring, Plant Health, or both** (Manage
+  Users → *Can use*). Existing users keep both.
 
-**One-off dates** (recorded once per season):
+### The form
 
-- Emergence of first leaf
-- Burn-off spray
-- First train
-- Second train
-- Lateral development
-- Burr initiation
-- Cone initiation
+| Section | In the app |
+|---|---|
+| 1. Sample details | Block & variety (same list as mites), Row #, Bay #, date, time, inspector. Shows the last check of that block and fills in its row and bay. |
+| General weather & block conditions | **Not in the app.** Comes from the weather station and soil probes. |
+| 2. Block overview | Bine health, Coir status, Weed pressure, Grass length, Trellis integrity, Irrigation leaks as tap choices, plus a photo. |
+| Block treatments | **Not in the app.** Comes from other records. |
+| 3. Crop phenology | One required choice of the 7 growth stages. |
+| 4. Vine evaluation | Bines trained (/42), average and maximum bine height (cm), internode spacing (<1 m, 1–2 m, 2–3 m), average lateral length, snapped tips (bine / lateral), overall bine health, leaf colour (7-step chart), leaf size, leaf damage (tick all that apply), 2 leaf photos. |
+| Comments | Free text. |
 
-**Weekly measurements** (recorded every visit):
+**When questions are asked** (from the form's notes):
+- Internode <1 m: until the average height passes 2 m.
+- Internode 1–2 m: once the average passes 2 m.
+- Internode 2–3 m: once the average passes 3 m.
+- Lateral length: from the *Lateral Development* stage on.
 
-- Leaf colour, picked from the swatch scale below
-- Length of average vine up the string
-- Internode spacing (top one)
-- Lateral length
-- Weight of 10 cones
+Questions that don't apply are saved blank.
 
-## Leaf colour scale
+**Checks:** the tallest bine can't be shorter than the average; bines trained is
+0–42; whole numbers where the form expects counts.
 
-The farm's chart, with exact colours taken from it:
+### Leaf colour scale
+
+The 7-step chart (1 = yellow-green … 7 = darkest green). The score 1–7 is saved.
 
 ![Leaf colour chart](img/leaf-colour-chart.png)
 
-| Score | Colour |
-|---|---|
-| 1 | `#b3c600` (yellow-green) |
-| 2 | `#77891b` |
-| 3 | `#677c1d` |
-| 4 | `#517720` |
-| 5 | `#3a6023` |
-| 6 | `#2e542d` |
-| 7 | `#1f4126` (darkest green) |
+| Score | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| Colour | `#b3c600` | `#77891b` | `#677c1d` | `#517720` | `#3a6023` | `#2e542d` | `#1f4126` |
 
-The score (1–7) is what's stored and exported. In the app each swatch is a large
-tap target showing its number, so the choice doesn't rely on colour alone.
+The paper form's colour row uses different shades, and Jason noted a good chart
+is hard to find. Confirm which scale to keep before the season's data builds up.
 
-## Where the data lives
+## Data
 
-Plant health data goes in its **own Google Sheet** ("Hop Farm – Plant Health"),
-separate from the mite sheet ("Hop Farm Data"). It is still the same app, with one
-sign-in:
+Stored in its own **Hop Farm – Plant Health** Google Sheet (tab `PlantChecks`),
+connected with **Hop Farm → Connect Plant Health sheet…**. Users and blocks come
+from the shared **Users & Setup** sheet.
 
-- The existing Apps Script opens the plant sheet by its ID (a single setting,
-  `PLANT_HEALTH_SHEET_ID`) and writes the Plants, PlantMilestones and
-  PlantInspections tabs there.
-- Users, roles and the block list are in the shared **Users & Setup** sheet, so
-  staff and blocks are managed in one place for both sections. Each user gets access to Mite Monitoring, Plant Health or both.
-- Each sheet can be shared with different people. The script owner needs edit
-  access to both.
-- Exports, version history and season archiving are per sheet.
+## Reports
 
-## Proposed design
+- **Growth week by week:** bar charts per block, one bar per check: average and
+  maximum height, bines trained, internode spacing, lateral length, leaf colour.
+- **When each stage was first recorded:** a block × stage table for the season.
+- **Plant checks CSV:** one row per check, with a WeekStarting column for Excel
+  PivotTables. Also available from the sheet: **Hop Farm → Build plant checks export**.
 
-**Tabs in the Plant Health sheet:**
+## Help
 
-| Tab | One row per | Columns |
-|---|---|---|
-| Plants | monitored plant (set up once) | PlantID, BlockVarietyID, Block, Variety, Row, PlantNumber, WalkOrder, Active, Notes |
-| PlantMilestones | plant (or block, see Q2) per season | Season, PlantID, FirstLeafDate, BurnOffSprayDate, FirstTrainDate, SecondTrainDate, LateralDevelopmentDate, BurrInitiationDate, ConeInitiationDate |
-| PlantInspections | plant per visit | InspectionID, PlantID, InspectionDate, Season, InspectorEmail, LeafColour (1–7), VineLength, InternodeSpacing, LateralLength, Cone10Weight, Comment, Photo |
+The 16 reference pictures from the workbook's Photos tab are in **Help → Plant
+health**, and are available offline: nitrogen, phosphorus, potassium, calcium,
+magnesium, sulphur, boron, chlorine, copper, iron, manganese, molybdenum and
+zinc deficiencies, plus hop aphids.
 
-**App**
+## Still to confirm with Jason
 
-- *Weekly round:* choose a block, then go plant by plant in walking order and
-  press **Save & next plant**. Works offline, like the mite samples.
-- *Milestones:* a **Seen today** button for each one not yet reached. Once
-  recorded it's locked in and no longer asked.
-- *Access:* users get Mite Monitoring, Plant Health, or both.
-- *Reports:*
-  - weekly growth charts per block (vine length, internode spacing, lateral length, leaf colour)
-  - milestone timing per block
-  - CSV for Excel
-
-## Open questions (sent to Jason)
-
-1. Which blocks are monitored: all 39 block/varieties (about 550 plants a week) or a selection?
-2. Are burn-off spray and the two training dates per block rather than per plant?
-3. ~~Leaf colour scale~~: **answered**, the 7-step chart above.
-4. Units: vine length (cm or m), internode spacing (mm or cm), lateral length (cm), cone weight (g, fresh?).
-5. Is "average vine length" the average of the bines on a plant's string, or one measurement?
-6. Should cone weight only be asked for after cone initiation?
-7. Anything else weekly, e.g. pest or disease notes, or a photo?
+1. Which leaf colour scale to use (see above).
+2. How many bays per block each week, and which blocks are monitored.
+3. Whether internode 1–2 m should also stop once the average passes 3 m (as <1 m does at 2 m).

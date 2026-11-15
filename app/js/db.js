@@ -3,28 +3,35 @@
 // so a change can never be saved without also being queued for upload.
 
 const DB_NAME = 'hopfarm';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // 2: plant health checks
 let dbPromise;
 
 export const STORES = {
   Samples: 'samples',
   LeafAnalysis: 'leaves',
+  PlantChecks: 'plantChecks',
 };
+
+export const KEY_OF = { Samples: 'SampleID', LeafAnalysis: 'LeafAnalysisID', PlantChecks: 'CheckID' };
 
 export function openDB() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
       const r = indexedDB.open(DB_NAME, DB_VERSION);
+      // Upgrades keep everything already on the tablet (including unsent changes);
+      // only stores that don't exist yet are created.
       r.onupgradeneeded = () => {
         const d = r.result;
-        d.createObjectStore('samples', { keyPath: 'SampleID' });
-        d.createObjectStore('leaves', { keyPath: 'LeafAnalysisID' }).createIndex('SampleID', 'SampleID');
-        d.createObjectStore('blocks', { keyPath: 'BlockVarietyID' });
-        d.createObjectStore('users', { keyPath: 'UserEmail' });
-        d.createObjectStore('help', { keyPath: 'HelpID' });
-        d.createObjectStore('outbox', { keyPath: 'seq', autoIncrement: true });
-        d.createObjectStore('photos', { keyPath: 'id' });
-        d.createObjectStore('meta');
+        const add = (name, opts) => (d.objectStoreNames.contains(name) ? null : d.createObjectStore(name, opts));
+        add('samples', { keyPath: 'SampleID' });
+        add('leaves', { keyPath: 'LeafAnalysisID' })?.createIndex('SampleID', 'SampleID');
+        add('blocks', { keyPath: 'BlockVarietyID' });
+        add('users', { keyPath: 'UserEmail' });
+        add('help', { keyPath: 'HelpID' });
+        add('outbox', { keyPath: 'seq', autoIncrement: true });
+        add('photos', { keyPath: 'id' });
+        add('meta');
+        add('plantChecks', { keyPath: 'CheckID' });
       };
       r.onsuccess = () => resolve(r.result);
       r.onerror = () => reject(r.error);
@@ -97,9 +104,9 @@ export const setMeta = (key, value) => put('meta', value, key);
  */
 export async function saveChanges(changes, photos = []) {
   const d = await openDB();
-  const t = d.transaction(['samples', 'leaves', 'outbox', 'photos'], 'readwrite');
+  const t = d.transaction(['samples', 'leaves', 'plantChecks', 'outbox', 'photos'], 'readwrite');
   for (const c of changes) {
-    const key = c.table === 'Samples' ? 'SampleID' : 'LeafAnalysisID';
+    const key = KEY_OF[c.table];
     if (c.remove) t.objectStore(STORES[c.table]).delete(c.record[key]);
     else t.objectStore(STORES[c.table]).put(c.record);
     t.objectStore('outbox').add({

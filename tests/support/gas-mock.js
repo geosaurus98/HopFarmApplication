@@ -110,6 +110,7 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
         const date = `${parts.year}-${parts.month}-${parts.day}`;
         if (fmt === 'yyyy-MM-dd') return date;
         if (fmt === 'yyyy-MM-dd HH:mm:ss') return `${date} ${parts.hour}:${parts.minute}:${parts.second}`;
+        if (fmt === 'HH:mm') return `${parts.hour}:${parts.minute}`;
         throw new Error(`mock formatDate: unsupported format ${fmt}`);
       },
     },
@@ -118,12 +119,16 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
   const dir = path.join(__dirname, '..', '..', 'apps-script');
   // Apps Script runs files in the editor's order, which the user controls; test both orders.
   const src = fileOrder.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
-  const exportsList = ['setupHopFarmWorkbook', 'connectSetupSheet_', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
+  const exportsList = ['setupHopFarmWorkbook', 'connectSetupSheet_', 'connectPlantSheet_', 'buildPlantExport', 'PLANT_OPTIONS', 'PLANT_EXPORT_HEADERS', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
     'doGet', 'doPost', 'requiredLeaves', 'seasonOf', 'weekStarting', 'SCHEMA', 'REPORT_TABS', 'LEAF_EXPORT_HEADERS', 'SUMMARY_HEADERS'];
   const gs = new Function(...Object.keys(globals), `${src}\n;return {${exportsList.join(',')}};`)(...Object.values(globals));
 
   // Tabs are looked up in whichever spreadsheet now holds them.
-  const bookOf = (name) => Object.values(books).find((b) => b.sheets[name] && b !== ss && ['Users', 'BlockVarieties', 'HelpReference'].includes(name) && props.SETUP_SHEET_ID === b.id) || ss;
+  const bookOf = (name) => {
+    const linked = ['Users', 'BlockVarieties', 'HelpReference'].includes(name) ? props.SETUP_SHEET_ID
+      : name === 'PlantChecks' || name === 'Export_PlantChecks' ? props.PLANT_SHEET_ID : null;
+    return (linked && books[linked] && books[linked].sheets[name]) ? books[linked] : ss;
+  };
   const table = (name, book) => {
     const d = (book || bookOf(name)).sheets[name].data;
     const headers = d[0];
@@ -151,6 +156,8 @@ function createSeededGas(opts = {}) {
   if (opts.split) {
     g.setup = g.newBook('SETUP_SHEET_ID_000000000000000');
     g.gs.connectSetupSheet_('https://docs.google.com/spreadsheets/d/SETUP_SHEET_ID_000000000000000/edit');
+    g.plant = g.newBook('PLANT_SHEET_ID_000000000000000');
+    g.gs.connectPlantSheet_('https://docs.google.com/spreadsheets/d/PLANT_SHEET_ID_000000000000000/edit');
   }
   return g;
 }

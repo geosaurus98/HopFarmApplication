@@ -162,3 +162,55 @@ test('permissions by role and status', () => {
   assert.equal(L.analystEditUntil(recent).toISOString().slice(0, 10), '2026-11-10');
   assert.equal(L.can('Collector', 'export'), false);
 });
+
+test('plant check: questions follow the form notes', () => {
+  const q = (h, stage = 'Training Stage (Bines being wrapped)') => L.plantQuestions({ AvgBineHeightCm: h, GrowthStage: stage });
+  assert.deepEqual(q(''), { InternodeUnder1mCm: true, Internode1to2mCm: false, Internode2to3mCm: false, AvgLateralLengthCm: false });
+  assert.deepEqual(q(150), { InternodeUnder1mCm: true, Internode1to2mCm: false, Internode2to3mCm: false, AvgLateralLengthCm: false });
+  assert.deepEqual(q(250), { InternodeUnder1mCm: false, Internode1to2mCm: true, Internode2to3mCm: false, AvgLateralLengthCm: false });
+  assert.deepEqual(q(350), { InternodeUnder1mCm: false, Internode1to2mCm: true, Internode2to3mCm: true, AvgLateralLengthCm: false });
+  assert.equal(q(350, 'Lateral Development (Side arm growth)').AvgLateralLengthCm, true);
+  assert.equal(q(350, 'Harvest Ready').AvgLateralLengthCm, true);
+  assert.equal(q(350, 'Vegetative Growth (Rapid vertical climbing)').AvgLateralLengthCm, false);
+});
+
+test('plant check: validation', () => {
+  const ok = { InspectionDate: '2026-11-10', BlockVarietyID: 'C2-RIWAKA', Row: 14, Bay: 3, GrowthStage: L.PLANT_OPTIONS.GrowthStage[1] };
+  assert.deepEqual(L.validatePlantCheck(ok, '2026-11-15'), {});
+  const err = (extra) => Object.keys(L.validatePlantCheck({ ...ok, ...extra }, '2026-11-15'));
+  assert.deepEqual(err({ Row: '' }), ['Row']);
+  assert.deepEqual(err({ GrowthStage: '' }), ['GrowthStage']);
+  assert.deepEqual(err({ InspectionDate: '2026-11-16' }), ['InspectionDate']);
+  assert.deepEqual(err({ BinesTrained: 43 }), ['BinesTrained']);
+  assert.deepEqual(err({ BinesTrained: 0 }), [], 'zero bines is valid');
+  assert.deepEqual(err({ AvgBineHeightCm: 200, MaxBineHeightCm: 150 }), ['MaxBineHeightCm']);
+  assert.deepEqual(err({ LeafColour: 8 }), ['LeafColour']);
+});
+
+test('plant check: sections, edit rights, series and stage timeline', () => {
+  assert.deepEqual(L.userSections({ Role: 'Collector', Sections: '' }), ['Mites', 'Plant Health']);
+  assert.deepEqual(L.userSections({ Role: 'Collector', Sections: ['Plant Health'] }), ['Plant Health']);
+  assert.deepEqual(L.userSections({ Role: 'Administrator', Sections: ['Mites'] }), ['Mites', 'Plant Health']);
+  const now = Date.parse('2026-11-15T00:00:00Z');
+  const mine = { InspectorEmail: 'a@x', CreatedAt: '2026-11-10T00:00:00Z' };
+  const user = { UserEmail: 'a@x', Role: 'Collector', Sections: ['Plant Health'] };
+  assert.equal(L.canEditPlantCheck(user, mine, now), true);
+  assert.equal(L.canEditPlantCheck(user, { ...mine, CreatedAt: '2026-09-01T00:00:00Z' }, now), false);
+  assert.equal(L.canEditPlantCheck(user, { ...mine, InspectorEmail: 'b@x' }, now), false);
+  assert.equal(L.canEditPlantCheck({ ...user, Role: 'Administrator' }, { ...mine, InspectorEmail: 'b@x' }, now), true);
+
+  const S = L.PLANT_OPTIONS.GrowthStage;
+  const checks = [
+    { BlockVarietyID: 'C2', Block: 'C2', Variety: 'Riwaka', InspectionDate: '2026-10-20', GrowthStage: S[1], AvgBineHeightCm: 80 },
+    { BlockVarietyID: 'C2', Block: 'C2', Variety: 'Riwaka', InspectionDate: '2026-10-13', GrowthStage: S[0], AvgBineHeightCm: 20 },
+    { BlockVarietyID: 'C2', Block: 'C2', Variety: 'Riwaka', InspectionDate: '2026-10-27', GrowthStage: S[1], AvgBineHeightCm: '' },
+    { BlockVarietyID: 'A1', Block: 'A1', Variety: 'Cascade', InspectionDate: '2026-10-27', GrowthStage: S[2], AvgBineHeightCm: 150, Deleted: true },
+  ];
+  assert.deepEqual(L.plantSeries(checks, 'C2', 'AvgBineHeightCm').map((p) => [p.date, p.value]), [['2026-10-13', 20], ['2026-10-20', 80]]);
+  const tl = L.stageTimeline(checks);
+  assert.equal(tl.length, 1, 'deleted check ignored');
+  assert.deepEqual(tl[0].firstSeen.slice(0, 3), ['2026-10-13', '2026-10-20', '']);
+  const rows = L.plantExportRows(checks, () => 'Pat');
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0][L.PLANT_EXPORT_HEADERS.indexOf('WeekStarting')], '2026-10-12');
+});

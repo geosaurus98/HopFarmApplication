@@ -108,6 +108,7 @@ async function replacePhotoRef(ref, url) {
   for (const op of await db.getAll('outbox')) if (fix(op.patch)) await db.put('outbox', op);
   for (const s of await db.getAll('samples')) if (fix(s)) await db.put('samples', s);
   for (const l of await db.getAll('leaves')) if (fix(l)) await db.put('leaves', l);
+  for (const c of await db.getAll('plantChecks')) if (fix(c)) await db.put('plantChecks', c);
 }
 
 const PUSH_BATCH = 150;
@@ -143,6 +144,11 @@ async function pull() {
     if (pendingIds.has(l.LeafAnalysisID)) continue;
     if (l.Deleted) await db.del('leaves', l.LeafAnalysisID);
     else await db.put('leaves', l);
+  }
+  for (const c of data.plantChecks || []) {
+    if (pendingIds.has(c.CheckID)) continue;
+    if (c.Deleted) await db.del('plantChecks', c.CheckID);
+    else await db.put('plantChecks', c);
   }
   const session = await db.getMeta('session');
   if (session && data.user) await db.setMeta('session', { ...session, user: data.user });

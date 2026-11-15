@@ -91,7 +91,7 @@ test('login by username or email, checks code and active flag; never returns acc
   const g = createSeededGas();
   const byName = g.post({ action: 'login', login: ' Lee ', code: '333333' });
   assert.equal(byName.ok, true);
-  assert.deepEqual(byName.user, { UserEmail: 'lab@farm.nz', Username: 'lee', FullName: 'Lee Analyst', Role: 'Analyst', Active: true });
+  assert.deepEqual(byName.user, { UserEmail: 'lab@farm.nz', Username: 'lee', FullName: 'Lee Analyst', Role: 'Analyst', Sections: ['Mites', 'Plant Health'], Active: true });
   const ok = g.post({ action: 'login', login: 'LAB@farm.nz ', code: '333333' });
   assert.equal(ok.ok, true);
   assert.equal(ok.user.Role, 'Analyst');
@@ -479,4 +479,133 @@ test('every count field is writable by the API', () => {
   for (const f of ['PhytoseiulusCount', 'TetranychusCount', 'PredatorEggCount', 'TwoSpotEggCount', 'OtherBeneficialCount']) {
     assert.ok(block.includes(`'${f}'`), f);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Plant Health
+// ---------------------------------------------------------------------------
+const plantCheck = (id, extra = {}) => ({
+  table: 'PlantChecks', id, isNew: true,
+  patch: {
+    InspectionDate: '2026-11-10', InspectionTime: '09:15', InspectorEmail: 'col@farm.nz',
+    BlockVarietyID: 'C2-RIWAKA', Row: 14, Bay: 3, GrowthStage: 'Training Stage (Bines being wrapped)',
+    BineHealth: 'Normal', WeedPressure: 'Low', BinesTrained: 30, AvgBineHeightCm: 85, MaxBineHeightCm: 120,
+    InternodeUnder1mCm: 12.5, LeafColour: 5, LeafSize: 'Medium', LeafDamage: 'Curling, Chewing', ...extra,
+  },
+});
+
+test('plant checks: saved with block snapshot, season and server-assigned record numbers', () => {
+  const g = createSeededGas({ split: true });
+  const r = push(g, COL, [plantCheck('check-0001'), plantCheck('check-0002', { Bay: 4 }),
+    plantCheck('check-0003', { InspectionDate: '2027-08-01', GrowthStage: 'Spring Emergence / Rhizome Sprouting' })]);
+  assert.ok(r.results.every((x) => x.ok), JSON.stringify(r.results));
+  const rows = g.table('PlantChecks', g.plant);
+  assert.equal(g.ss.getSheetByName('PlantChecks'), null, 'plant data lives in the Plant Health sheet');
+  assert.deepEqual(rows.map((c) => [c.Season, c.RecordNumber]), [['2026/27', 1], ['2026/27', 2], ['2027/28', 1]]);
+  assert.equal(rows[0].Block, 'C2');
+  assert.equal(rows[0].Variety, 'Riwaka');
+  assert.equal(rows[0].LeafDamage, 'Chewing, Curling', 'stored in the form order');
+  assert.equal(rows[0].InternodeUnder1mCm, 12.5);
+
+  const pulled = g.post({ action: 'pull', ...COL });
+  assert.equal(pulled.plantChecks.length, 3);
+  assert.equal(pulled.plantChecks[0].InspectionDate, '2026-11-10');
+  assert.equal(pulled.plantChecks[0].InspectionTime, '09:15');
+
+  const exp = g.post({ action: 'export', ...COL, type: 'plant', season: '2026/27' });
+  assert.equal(exp.ok, true, exp.error);
+  const lines = exp.csv.trim().split('\r\n');
+  assert.equal(lines.length, 3);
+  assert.equal(lines[0], g.gs.PLANT_EXPORT_HEADERS.join(','));
+  assert.match(lines[1], /^1,2026\/27,2026-11-10,2026-11-09,09:15,Cole Collector,C2,Riwaka,14,3,Normal,/);
+});
+
+test('plant checks: validation follows the form', () => {
+  const g = createSeededGas();
+  const bad = (extra) => push(g, COL, [plantCheck('check-bad01', extra)]).results[0].error;
+  assert.match(bad({ GrowthStage: '' }), /growth stage/);
+  assert.match(bad({ GrowthStage: 'Flowering' }), /not a choice/);
+  assert.match(bad({ Row: '' }), /Row # must be/);
+  assert.match(bad({ Bay: 0 }), /Bay # must be/);
+  assert.match(bad({ BinesTrained: 43 }), /bines trained must be a whole number from 0 to 42/);
+  assert.match(bad({ BinesTrained: 2.5 }), /bines trained/);
+  assert.match(bad({ AvgBineHeightCm: -1 }), /Average bine height/);
+  assert.match(bad({ MaxBineHeightCm: 50 }), /Maximum bine height cannot be less than the average/);
+  assert.match(bad({ LeafColour: 8 }), /Leaf colour/);
+  assert.match(bad({ CoirStatus: 'Rotten' }), /not a choice for CoirStatus/);
+  assert.match(bad({ LeafDamage: 'Hail' }), /not a leaf damage choice/);
+  assert.match(bad({ InspectionTime: '9am' }), /14:30/);
+  assert.match(bad({ BlockVarietyID: 'ZZ-NOPE' }), /block and variety/);
+  // Optional fields may be blank; zero is a real value.
+  const ok = push(g, COL, [plantCheck('check-0001', { BinesTrained: 0, AvgBineHeightCm: '', MaxBineHeightCm: '', LeafColour: '', LeafDamage: '' })]);
+  assert.equal(ok.results[0].ok, true, ok.results[0].error);
+  assert.equal(g.table('PlantChecks')[0].BinesTrained, 0);
+});
+
+test('plant checks: own checks editable for 31 days, others only by an admin', () => {
+  const g = createSeededGas();
+  push(g, COL, [plantCheck('check-0001')]);
+  let r = push(g, LAB, [{ table: 'PlantChecks', id: 'check-0001', patch: { Comments: 'x' } }]);
+  assert.match(r.results[0].error, /only change your own/);
+  r = push(g, COL, [{ table: 'PlantChecks', id: 'check-0001', patch: { Comments: 'Wind damage on row 14' } }]);
+  assert.equal(r.results[0].ok, true);
+  r = push(g, LAB, [plantCheck('check-0002', { InspectorEmail: 'col@farm.nz' })]);
+  assert.match(r.results[0].error, /under your own name/);
+  const col = g.sheets.PlantChecks.data[0].indexOf('CreatedAt');
+  g.sheets.PlantChecks.data[1][col] = new Date(Date.now() - 40 * 86400000);
+  r = push(g, COL, [{ table: 'PlantChecks', id: 'check-0001', patch: { Comments: 'late' } }]);
+  assert.match(r.results[0].error, /more than 31 days old/);
+  r = push(g, ADMIN, [{ table: 'PlantChecks', id: 'check-0001', patch: { Deleted: true } }]);
+  assert.equal(r.results[0].ok, true);
+  assert.equal(g.post({ action: 'export', ...ADMIN, type: 'plant' }).rows, 0, 'deleted checks are left out');
+});
+
+test('sections: people only reach the parts of the app they are given', () => {
+  const g = createSeededGas();
+  const save = (user) => g.post({ action: 'saveUser', ...ADMIN, isNew: true, user });
+  const p = save({ UserEmail: 'pat@farm.nz', Username: 'pat', FullName: 'Pat Plants', Role: 'Collector', Sections: ['Plant Health'], AccessCode: '515151' });
+  assert.equal(p.ok, true, p.error);
+  assert.deepEqual(p.user.Sections, ['Plant Health']);
+  const PAT = { login: 'pat', code: '515151' };
+  assert.deepEqual(g.post({ action: 'login', ...PAT }).user.Sections, ['Plant Health']);
+  assert.match(push(g, PAT, [newSample('sample-0001', { CollectorEmail: 'pat@farm.nz' })]).results[0].error, /does not have access to Mite Monitoring/);
+  assert.equal(push(g, PAT, [plantCheck('check-0001', { InspectorEmail: 'pat@farm.nz' })]).results[0].ok, true);
+  push(g, LAB, [newSample('sample-0002', { CollectorEmail: 'lab@farm.nz' })]);
+  const pulled = g.post({ action: 'pull', ...PAT });
+  assert.equal(pulled.samples.length, 0, 'no mite data sent to a plant-only user');
+  assert.equal(pulled.plantChecks.length, 1);
+  assert.equal(g.post({ action: 'export', ...PAT, type: 'leaves' }).ok, false);
+
+  const m = save({ UserEmail: 'max@farm.nz', Username: 'max', FullName: 'Max Mites', Role: 'Analyst', Sections: ['Mites'], AccessCode: '626262' });
+  const MAX = { login: 'max', code: '626262' };
+  assert.equal(m.ok, true);
+  assert.match(push(g, MAX, [plantCheck('check-0002', { InspectorEmail: 'max@farm.nz' })]).results[0].error, /does not have access to Plant Health/);
+  assert.equal(g.post({ action: 'pull', ...MAX }).plantChecks.length, 0);
+  assert.match(save({ UserEmail: 'nil@farm.nz', Username: 'nil', FullName: 'No One', Role: 'Collector', Sections: [] }).error, /at least one section/);
+  // Existing users with a blank Sections cell keep everything.
+  assert.deepEqual(g.post({ action: 'login', login: 'cole', code: '222222' }).user.Sections, ['Mites', 'Plant Health']);
+});
+
+test('plant pick-lists and export columns match between server and app', async () => {
+  const L = await import('../../app/js/logic.js');
+  const g = createGas();
+  assert.deepEqual(JSON.parse(JSON.stringify(g.gs.PLANT_OPTIONS)), JSON.parse(JSON.stringify(L.PLANT_OPTIONS)));
+  assert.deepEqual(g.gs.PLANT_EXPORT_HEADERS, L.PLANT_EXPORT_HEADERS);
+});
+
+test('Plant Health sheet: connecting moves existing checks and refuses the Users & Setup sheet', () => {
+  const g = createSeededGas();
+  push(g, COL, [plantCheck('check-0001')]);
+  g.newBook('SETUP_SHEET_ID_000000000000000');
+  g.gs.connectSetupSheet_('SETUP_SHEET_ID_000000000000000');
+  assert.throws(() => g.gs.connectPlantSheet_('SETUP_SHEET_ID_000000000000000'), /already connected as the Users & Setup sheet/);
+  const plant = g.newBook('PLANT_SHEET_ID_000000000000000');
+  const msg = g.gs.connectPlantSheet_('https://docs.google.com/spreadsheets/d/PLANT_SHEET_ID_000000000000000/edit');
+  assert.match(msg, /PlantChecks: 1 row copied and checked/);
+  assert.equal(g.table('PlantChecks', plant).length, 1);
+  assert.ok(g.ss.getSheetByName('OLD PlantChecks (moved – delete)').isSheetHidden());
+  assert.equal(push(g, COL, [plantCheck('check-0002', { Bay: 5 })]).results[0].ok, true);
+  assert.deepEqual(g.table('PlantChecks', plant).map((c) => c.RecordNumber), [1, 2]);
+  g.gs.buildPlantExport();
+  assert.equal(g.table('Export_PlantChecks', plant).length, 2);
 });

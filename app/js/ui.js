@@ -116,3 +116,16 @@ export function progressBar(p) {
   return h('div', { class: `progress-track${p.reached ? ' reached' : ''}`, role: 'progressbar', 'aria-valuenow': Math.round(p.pct * 100) },
     h('div', { class: 'bar', style: { width: `${Math.min(100, p.pct * 100)}%` } }));
 }
+
+/** Clear a field's error message as soon as the person changes that field. */
+export function clearErrorsOnEdit(form) {
+  const clear = (e) => {
+    const f = e.target.closest?.('.field');
+    if (!f || !f.classList.contains('has-error')) return;
+    f.classList.remove('has-error');
+    f.querySelectorAll('.error').forEach((el) => { el.textContent = ''; });
+  };
+  form.addEventListener('input', clear);
+  form.addEventListener('change', clear);
+  form.addEventListener('click', clear);
+}

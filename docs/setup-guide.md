@@ -124,6 +124,20 @@ staff won't notice anything.
 From then on, edit users and blocks in **Hop Farm – Users & Setup**, or use
 **Manage Users** in the app.
 
+### Plant Health sheet
+
+Plant checks get their own sheet in the same way:
+
+1. Create a new, empty Google Sheet (same Google account) called
+   **Hop Farm – Plant Health** and copy its address.
+2. In Hop Farm Data choose **Hop Farm → Connect Plant Health sheet…** and paste it.
+3. Delete the hidden **OLD PlantChecks (moved – delete)** tab afterwards, if one
+   was created.
+4. Share it with whoever needs the plant data.
+
+In **Manage Users**, tick what each person **Can use**: Mite Monitoring, Plant
+Health, or both. Existing users have both.
+
 ## 3. Publish the API (3 min)
 
 In the Apps Script editor: **Deploy → New deployment → ⚙ → Web app**

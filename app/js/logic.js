@@ -351,3 +351,180 @@ export async function compressImage(file, maxSide = 1600, quality = 0.75) {
   bmp.close?.();
   return canvas.toDataURL('image/jpeg', quality);
 }
+
+// ===========================================================================
+// Plant Health: one check per bay (7 plants between two posts) per visit.
+// Pick-lists exactly as on the farm's paper form; keep in sync with Setup.gs.
+// ===========================================================================
+export const SECTIONS = Object.freeze(['Mites', 'Plant Health']);
+
+/** Sections a user can use. Blank/missing = all; administrators always have all. */
+export function userSections(user) {
+  if (!user) return [];
+  if (user.Role === 'Administrator') return [...SECTIONS];
+  const raw = Array.isArray(user.Sections) ? user.Sections : String(user.Sections || '').split(',');
+  const valid = raw.map((x) => String(x).trim()).filter((x) => SECTIONS.includes(x));
+  return valid.length ? valid : [...SECTIONS];
+}
+export const hasSection = (user, section) => userSections(user).includes(section);
+
+export const PLANT_OPTIONS = Object.freeze({
+  BineHealth: ['Vigorous', 'Normal', 'Stunted', 'Pale/Chlorotic'],
+  CoirStatus: ['Intact', 'Broken Strings', 'Sagging Wire'],
+  WeedPressure: ['Low', 'Medium', 'Action Needed'],
+  GrassLength: ['Short', 'Medium', 'Long'],
+  TrellisIntegrity: ['Good', 'Loose', 'Damage'],
+  IrrigationLeaks: ['None', 'Minor', 'Major'],
+  GrowthStage: [
+    'Spring Emergence / Rhizome Sprouting',
+    'Training Stage (Bines being wrapped)',
+    'Vegetative Growth (Rapid vertical climbing)',
+    'Lateral Development (Side arm growth)',
+    'Flowering / Cone Initiation (Burr stage)',
+    'Cone Development & Maturation',
+    'Harvest Ready',
+  ],
+  OverallBineHealth: ['Vigorous', 'Stunted', 'Pale/Chlorotic'],
+  LeafSize: ['Small', 'Medium', 'Large'],
+  LeafDamage: ['Chewing', 'Dark Spotting', 'Light Spotting', 'Vein Staining', 'Curling'],
+});
+
+/** Section 2 (block overview) questions, in form order. */
+export const BLOCK_OVERVIEW = Object.freeze([
+  { key: 'BineHealth', label: 'Bine health' },
+  { key: 'CoirStatus', label: 'Coir status' },
+  { key: 'WeedPressure', label: 'Weed pressure' },
+  { key: 'GrassLength', label: 'Grass length' },
+  { key: 'TrellisIntegrity', label: 'Trellis integrity' },
+  { key: 'IrrigationLeaks', label: 'Irrigation leaks' },
+]);
+
+export const MAX_BINES_PER_BAY = 42; // 7 plants × 2 strings × 3 bines
+
+/** The farm's 7-step leaf colour chart (1 = yellow-green … 7 = darkest green). */
+export const LEAF_COLOURS = Object.freeze(['#b3c600', '#77891b', '#677c1d', '#517720', '#3a6023', '#2e542d', '#1f4126']);
+
+/** Short names of growth stages for charts and lists. */
+export const STAGE_SHORT = Object.freeze(['Emergence', 'Training', 'Vegetative', 'Laterals', 'Burr / cone initiation', 'Cone development', 'Harvest ready']);
+export const stageIndex = (stage) => PLANT_OPTIONS.GrowthStage.indexOf(stage);
+
+/**
+ * Which vine questions apply, from the form's notes:
+ *  - internode <1 m: stop asking once the average height passes 2 m
+ *  - internode 1–2 m: only once the average passes 2 m
+ *  - internode 2–3 m: only once the average passes 3 m
+ *  - lateral length: only from the Lateral Development stage on
+ */
+export function plantQuestions(check) {
+  const h = Number(check.AvgBineHeightCm);
+  const known = check.AvgBineHeightCm !== '' && check.AvgBineHeightCm !== null && check.AvgBineHeightCm !== undefined && Number.isFinite(h);
+  return {
+    InternodeUnder1mCm: !known || h <= 200,
+    Internode1to2mCm: known && h > 200,
+    Internode2to3mCm: known && h > 300,
+    AvgLateralLengthCm: stageIndex(check.GrowthStage) >= stageIndex('Lateral Development (Side arm growth)'),
+  };
+}
+
+const NUMBER_RULES = Object.freeze([
+  { key: 'BinesTrained', label: 'Bines trained', min: 0, max: MAX_BINES_PER_BAY, whole: true },
+  { key: 'AvgBineHeightCm', label: 'Average bine height', min: 0, max: 1000 },
+  { key: 'MaxBineHeightCm', label: 'Maximum bine height', min: 0, max: 1000 },
+  { key: 'InternodeUnder1mCm', label: 'Internode spacing <1 m', min: 0, max: 100 },
+  { key: 'Internode1to2mCm', label: 'Internode spacing 1–2 m', min: 0, max: 100 },
+  { key: 'Internode2to3mCm', label: 'Internode spacing 2–3 m', min: 0, max: 100 },
+  { key: 'AvgLateralLengthCm', label: 'Average lateral length', min: 0, max: 500 },
+  { key: 'SnappedTipsBine', label: 'Snapped bine tips', min: 0, max: 1000, whole: true },
+  { key: 'SnappedTipsLateral', label: 'Snapped lateral tips', min: 0, max: 1000, whole: true },
+]);
+
+/** Validate a plant check. Returns {field: message}. Optional numbers may be blank. */
+export function validatePlantCheck(c, today = todayLocal()) {
+  const errors = {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(c.InspectionDate || ''))) errors.InspectionDate = 'Choose the inspection date.';
+  else if (c.InspectionDate > today) errors.InspectionDate = 'The date cannot be in the future.';
+  if (!c.BlockVarietyID) errors.BlockVarietyID = 'Choose the block and variety.';
+  for (const f of ['Row', 'Bay']) {
+    const n = Number(c[f]);
+    if (c[f] === '' || c[f] === undefined || !Number.isInteger(n) || n < 1) errors[f] = `Enter the ${f.toLowerCase()} number.`;
+  }
+  if (!PLANT_OPTIONS.GrowthStage.includes(c.GrowthStage)) errors.GrowthStage = 'Choose the current growth stage.';
+  for (const r of NUMBER_RULES) {
+    const v = c[r.key];
+    if (v === '' || v === null || v === undefined) continue;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < r.min || n > r.max || (r.whole && !Number.isInteger(n))) {
+      errors[r.key] = `${r.whole ? 'Whole number' : 'Number'} from ${r.min} to ${r.max}.`;
+    }
+  }
+  const avg = Number(c.AvgBineHeightCm);
+  const max = Number(c.MaxBineHeightCm);
+  if (c.AvgBineHeightCm !== '' && c.MaxBineHeightCm !== '' && c.AvgBineHeightCm != null && c.MaxBineHeightCm != null &&
+      !errors.AvgBineHeightCm && !errors.MaxBineHeightCm && max < avg) {
+    errors.MaxBineHeightCm = 'The tallest bine cannot be shorter than the average.';
+  }
+  if (c.LeafColour !== '' && c.LeafColour != null && !(Number.isInteger(Number(c.LeafColour)) && c.LeafColour >= 1 && c.LeafColour <= LEAF_COLOURS.length)) {
+    errors.LeafColour = 'Choose a colour from the chart.';
+  }
+  return errors;
+}
+
+export const PLANT_EXPORT_HEADERS = [
+  'RecordNumber', 'Season', 'InspectionDate', 'WeekStarting', 'InspectionTime', 'Inspector',
+  'Block', 'Variety', 'Row', 'Bay',
+  'BineHealth', 'CoirStatus', 'WeedPressure', 'GrassLength', 'TrellisIntegrity', 'IrrigationLeaks',
+  'GrowthStage', 'BinesTrained', 'AvgBineHeightCm', 'MaxBineHeightCm',
+  'InternodeUnder1mCm', 'Internode1to2mCm', 'Internode2to3mCm', 'AvgLateralLengthCm',
+  'SnappedTipsBine', 'SnappedTipsLateral', 'OverallBineHealth', 'LeafColour', 'LeafSize', 'LeafDamage',
+  'Comments', 'OverviewPhoto', 'LeafPhoto1', 'LeafPhoto2', 'CheckID',
+];
+
+export function plantExportRows(checks, nameOf = (e) => e) {
+  return checks
+    .filter((c) => !toBoolean(c.Deleted))
+    .sort((a, b) => String(a.InspectionDate).localeCompare(String(b.InspectionDate)) ||
+      String(a.Block).localeCompare(String(b.Block), undefined, { numeric: true }) ||
+      Number(a.Row) - Number(b.Row) || Number(a.Bay) - Number(b.Bay))
+    .map((c) => PLANT_EXPORT_HEADERS.map((h) => {
+      if (h === 'WeekStarting') return weekStarting(c.InspectionDate);
+      if (h === 'Season') return c.Season || seasonOf(c.InspectionDate);
+      if (h === 'Inspector') return nameOf(c.InspectorEmail);
+      if (/Photo/.test(h)) return photoRef(c[h]);
+      return c[h] ?? '';
+    }));
+}
+
+/** Weekly series for one block: one point per check, in date order. */
+export function plantSeries(checks, blockVarietyId, field, season = '') {
+  return checks
+    .filter((c) => !toBoolean(c.Deleted) && c.BlockVarietyID === blockVarietyId &&
+      (!season || (c.Season || seasonOf(c.InspectionDate)) === season) &&
+      c[field] !== '' && c[field] !== null && c[field] !== undefined && Number.isFinite(Number(c[field])))
+    .map((c) => ({ date: c.InspectionDate, check: c, value: Number(c[field]) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** First date each growth stage was recorded, per block (for the stage timeline). */
+export function stageTimeline(checks, season = '') {
+  const out = new Map();
+  for (const c of checks) {
+    if (toBoolean(c.Deleted) || (season && (c.Season || seasonOf(c.InspectionDate)) !== season)) continue;
+    const i = stageIndex(c.GrowthStage);
+    if (i < 0) continue;
+    const key = c.BlockVarietyID;
+    if (!out.has(key)) out.set(key, { block: c.Block, variety: c.Variety, firstSeen: Array(PLANT_OPTIONS.GrowthStage.length).fill('') });
+    const row = out.get(key);
+    if (!row.firstSeen[i] || c.InspectionDate < row.firstSeen[i]) row.firstSeen[i] = c.InspectionDate;
+  }
+  return [...out.values()].sort((a, b) => `${a.block} ${a.variety}`.localeCompare(`${b.block} ${b.variety}`, undefined, { numeric: true }));
+}
+
+/** Can this user change this plant check? Own checks for 31 days; administrators always. */
+export function canEditPlantCheck(user, check, now = Date.now()) {
+  if (!user) return false;
+  if (user.Role === 'Administrator') return true;
+  if (!hasSection(user, 'Plant Health')) return false;
+  if (String(check.InspectorEmail || '').toLowerCase() !== String(user.UserEmail || '').toLowerCase()) return false;
+  const t = new Date(check.CreatedAt || NaN).getTime();
+  return !Number.isFinite(t) || now - t <= 31 * 86400000; // not yet uploaded = editable
+}

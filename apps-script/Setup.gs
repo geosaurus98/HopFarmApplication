@@ -15,7 +15,7 @@
 // Columns are found by header name, so their order in the sheet can change.
 // ---------------------------------------------------------------------------
 const SCHEMA = {
-  Users: ['UserEmail', 'Username', 'FullName', 'Role', 'Active', 'AccessCode', 'CreatedAt', 'UpdatedAt'],
+  Users: ['UserEmail', 'Username', 'FullName', 'Role', 'Sections', 'Active', 'AccessCode', 'CreatedAt', 'UpdatedAt'],
   BlockVarieties: ['BlockVarietyID', 'Block', 'Variety', 'AreaHa', 'Active', 'Notes', 'UpdatedAt'],
   Samples: [
     'SampleID', 'SampleNumber', 'CollectionDate', 'Season', 'CollectorEmail',
@@ -32,8 +32,49 @@ const SCHEMA = {
     'Deleted', 'CreatedAt', 'UpdatedAt', 'LastModifiedBy'
   ],
   AuditLog: ['AuditID', 'TableName', 'RowID', 'ChangedBy', 'ChangedAt', 'Summary'],
-  HelpReference: ['HelpID', 'Category', 'Title', 'Description', 'Image', 'SortOrder']
+  HelpReference: ['HelpID', 'Category', 'Title', 'Description', 'Image', 'SortOrder'],
+  // Plant Health: one row per bay (7 plants between two posts) per visit.
+  PlantChecks: [
+    'CheckID', 'RecordNumber', 'Season', 'InspectionDate', 'InspectionTime', 'InspectorEmail',
+    'BlockVarietyID', 'Block', 'Variety', 'Row', 'Bay',
+    'BineHealth', 'CoirStatus', 'WeedPressure', 'GrassLength', 'TrellisIntegrity', 'IrrigationLeaks', 'OverviewPhoto',
+    'GrowthStage',
+    'BinesTrained', 'AvgBineHeightCm', 'MaxBineHeightCm', 'InternodeUnder1mCm', 'Internode1to2mCm', 'Internode2to3mCm',
+    'AvgLateralLengthCm', 'SnappedTipsBine', 'SnappedTipsLateral', 'OverallBineHealth', 'LeafColour', 'LeafSize',
+    'LeafDamage', 'LeafPhoto1', 'LeafPhoto2', 'Comments',
+    'Deleted', 'CreatedAt', 'UpdatedAt', 'LastModifiedBy'
+  ]
 };
+
+/** App sections a user can be given (Users.Sections; blank = all). */
+const SECTIONS = ['Mites', 'Plant Health'];
+
+/**
+ * Plant check pick-lists, exactly as on the farm's paper form (Nov 2026).
+ * Keep in sync with PLANT in app/js/logic.js (checked by tests).
+ */
+const PLANT_OPTIONS = {
+  BineHealth: ['Vigorous', 'Normal', 'Stunted', 'Pale/Chlorotic'],
+  CoirStatus: ['Intact', 'Broken Strings', 'Sagging Wire'],
+  WeedPressure: ['Low', 'Medium', 'Action Needed'],
+  GrassLength: ['Short', 'Medium', 'Long'],
+  TrellisIntegrity: ['Good', 'Loose', 'Damage'],
+  IrrigationLeaks: ['None', 'Minor', 'Major'],
+  GrowthStage: [
+    'Spring Emergence / Rhizome Sprouting',
+    'Training Stage (Bines being wrapped)',
+    'Vegetative Growth (Rapid vertical climbing)',
+    'Lateral Development (Side arm growth)',
+    'Flowering / Cone Initiation (Burr stage)',
+    'Cone Development & Maturation',
+    'Harvest Ready'
+  ],
+  OverallBineHealth: ['Vigorous', 'Stunted', 'Pale/Chlorotic'],
+  LeafSize: ['Small', 'Medium', 'Large'],
+  LeafDamage: ['Chewing', 'Dark Spotting', 'Light Spotting', 'Vein Staining', 'Curling']
+};
+const MAX_BINES_PER_BAY = 42; // 7 plants × 2 strings × 3 bines
+const LEAF_COLOUR_STEPS = 7;
 
 // ---------------------------------------------------------------------------
 // Where each tab lives. Once a separate "Users & Setup" sheet is connected
@@ -43,35 +84,48 @@ const SCHEMA = {
 // ---------------------------------------------------------------------------
 const SETUP_TABLES = ['Users', 'BlockVarieties', 'HelpReference'];
 const SETUP_SHEET_PROP = 'SETUP_SHEET_ID';
-let setupSsCache_ = null;
+const PLANT_TABLES = ['PlantChecks'];
+const PLANT_SHEET_PROP = 'PLANT_SHEET_ID';
 
-function setupSheetId_() {
-  return PropertiesService.getScriptProperties().getProperty(SETUP_SHEET_PROP) || '';
+/** The separate spreadsheets that can be connected, and which tabs move to each. */
+const LINKED_SHEETS = {
+  setup: { prop: SETUP_SHEET_PROP, tables: SETUP_TABLES, title: 'Users & Setup', extraTabs: ['AuditLog'] },
+  plant: { prop: PLANT_SHEET_PROP, tables: PLANT_TABLES, title: 'Plant Health', extraTabs: [] }
+};
+const linkedSsCache_ = {};
+
+function linkedSheetId_(kind) {
+  return PropertiesService.getScriptProperties().getProperty(LINKED_SHEETS[kind].prop) || '';
 }
+function setupSheetId_() { return linkedSheetId_('setup'); }
 
-/** The connected Users & Setup spreadsheet, or null if not connected. */
-function setupSs_() {
-  const id = setupSheetId_();
+/** A connected spreadsheet ('setup' or 'plant'), or null if not connected. */
+function linkedSs_(kind) {
+  const id = linkedSheetId_(kind);
   if (!id) return null;
-  if (!setupSsCache_ || setupSsCache_.getId() !== id) setupSsCache_ = SpreadsheetApp.openById(id);
-  return setupSsCache_;
+  const c = linkedSsCache_[kind];
+  if (!c || c.getId() !== id) linkedSsCache_[kind] = SpreadsheetApp.openById(id);
+  return linkedSsCache_[kind];
 }
+function setupSs_() { return linkedSs_('setup'); }
 
 /** The spreadsheet that holds a given tab. */
 function ssFor_(table) {
-  if (SETUP_TABLES.indexOf(table) !== -1) {
-    const s = setupSs_();
-    if (s) return s;
+  for (const kind in LINKED_SHEETS) {
+    if (LINKED_SHEETS[kind].tables.indexOf(table) !== -1) {
+      const s = linkedSs_(kind);
+      if (s) return s;
+    }
   }
   return SpreadsheetApp.getActive();
 }
 
 const KEYS = {
   Users: 'UserEmail', BlockVarieties: 'BlockVarietyID', Samples: 'SampleID',
-  LeafAnalysis: 'LeafAnalysisID', AuditLog: 'AuditID', HelpReference: 'HelpID'
+  LeafAnalysis: 'LeafAnalysisID', AuditLog: 'AuditID', HelpReference: 'HelpID', PlantChecks: 'CheckID'
 };
 
-const DATE_COLUMNS = ['CollectionDate'];
+const DATE_COLUMNS = ['CollectionDate', 'InspectionDate'];
 const DATETIME_COLUMNS = ['CreatedAt', 'UpdatedAt', 'AnalysisStartedAt', 'AnalysisCompletedAt',
   'AnalysisDateTime', 'ChangedAt'];
 const BOOL_COLUMNS = ['Active', 'Deleted'];
@@ -145,7 +199,10 @@ function onOpen() {
     .addItem('Run data quality report', 'buildDataQualityReport')
     .addSeparator()
     .addItem('Repair / extend workbook structure', 'setupHopFarmWorkbook')
+    .addItem('Build plant checks export', 'buildPlantExport')
+    .addSeparator()
     .addItem('Connect Users & Setup sheet…', 'connectSetupSheet')
+    .addItem('Connect Plant Health sheet…', 'connectPlantSheet')
     .addToUi();
 }
 
@@ -155,6 +212,7 @@ function onOpen() {
 function setupHopFarmWorkbook() {
   const ss = SpreadsheetApp.getActive();
   const setup = setupSs_();
+  const plant = linkedSs_('plant');
   Object.keys(SCHEMA).forEach(name => ensureSheet_(ssFor_(name), name, SCHEMA[name]));
   if (setup) ensureSheet_(setup, 'AuditLog', SCHEMA.AuditLog); // log of changes to users
   applyFormatsAndValidation_();
@@ -166,7 +224,7 @@ function setupHopFarmWorkbook() {
   seedIfEmpty_(ssFor_('BlockVarieties').getSheetByName('BlockVarieties'), exampleBlockVarieties_());
   seedIfEmpty_(ssFor_('HelpReference').getSheetByName('HelpReference'), helpContent_());
 
-  [ss, setup].forEach(book => {
+  [ss, setup, plant].forEach(book => {
     const sheet1 = book && book.getSheetByName('Sheet1');
     if (sheet1 && sheet1.getLastRow() === 0 && book.getSheets().length > 1) book.deleteSheet(sheet1);
   });
@@ -243,6 +301,11 @@ function applyFormatsAndValidation_() {
   const users = tab('Users');
   columnRange_(users, 'Role').setDataValidation(roleList);
   columnRange_(users, 'AccessCode').setNumberFormat('@');
+
+  const plant = tab('PlantChecks');
+  columnRange_(plant, 'InspectionTime').setNumberFormat('@'); // keep "14:30" as text
+  columnRange_(plant, 'InspectionDate').setNumberFormat('yyyy-mm-dd');
+  ['CreatedAt', 'UpdatedAt'].forEach(h => columnRange_(plant, h).setNumberFormat('yyyy-mm-dd hh:mm:ss'));
 }
 
 /** Returns true if rows were written. */
@@ -425,6 +488,7 @@ function toBool_(v) {
 /** Sheet value -> JSON value. Dates become 'YYYY-MM-DD' or ISO strings. */
 function serializeValue_(col, v) {
   if (BOOL_COLUMNS.indexOf(col) !== -1) return toBool_(v);
+  if (col === 'InspectionTime' && v instanceof Date) return Utilities.formatDate(v, tz_(), 'HH:mm');
   if (v instanceof Date) {
     if (isNaN(v.getTime())) return '';
     return DATE_COLUMNS.indexOf(col) !== -1
@@ -556,6 +620,51 @@ function sampleSummaryRows_(filter) {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Plant checks export: one row per bay visit
+// ---------------------------------------------------------------------------
+const PLANT_EXPORT_HEADERS = [
+  'RecordNumber', 'Season', 'InspectionDate', 'WeekStarting', 'InspectionTime', 'Inspector',
+  'Block', 'Variety', 'Row', 'Bay',
+  'BineHealth', 'CoirStatus', 'WeedPressure', 'GrassLength', 'TrellisIntegrity', 'IrrigationLeaks',
+  'GrowthStage', 'BinesTrained', 'AvgBineHeightCm', 'MaxBineHeightCm',
+  'InternodeUnder1mCm', 'Internode1to2mCm', 'Internode2to3mCm', 'AvgLateralLengthCm',
+  'SnappedTipsBine', 'SnappedTipsLateral', 'OverallBineHealth', 'LeafColour', 'LeafSize', 'LeafDamage',
+  'Comments', 'OverviewPhoto', 'LeafPhoto1', 'LeafPhoto2', 'CheckID'
+];
+
+function plantExportRows_(filter) {
+  const names = userNames_();
+  return readTable_('PlantChecks')
+    .filter(c => !toBool_(c.Deleted) && matchesFilter_(c, filter))
+    .sort((a, b) => isoDate_(a.InspectionDate).localeCompare(isoDate_(b.InspectionDate)) ||
+      String(a.Block).localeCompare(String(b.Block), undefined, { numeric: true }) ||
+      (Number(a.Row) - Number(b.Row)) || (Number(a.Bay) - Number(b.Bay)))
+    .map(c => {
+      const d = isoDate_(c.InspectionDate);
+      return PLANT_EXPORT_HEADERS.map(h => {
+        if (h === 'InspectionDate') return d;
+        if (h === 'WeekStarting') return weekStarting(d);
+        if (h === 'Inspector') return nameOf_(names, c.InspectorEmail);
+        return c[h] === undefined ? '' : c[h];
+      });
+    });
+}
+
+function buildPlantExport() {
+  const rows = plantExportRows_();
+  // Written into the Plant Health sheet when one is connected.
+  writeReport_('Export_PlantChecks', PLANT_EXPORT_HEADERS, rows, ssFor_('PlantChecks')).activate();
+  SpreadsheetApp.getActive().toast(rows.length + ' plant checks. File > Download to save as Excel or CSV.', 'Hop Farm', 8);
+}
+
+/** Sections this user can use. Blank = all sections. */
+function userSections_(u) {
+  const raw = String(u.Sections || '').split(',').map(x => x.trim()).filter(Boolean);
+  const valid = raw.filter(x => SECTIONS.indexOf(x) !== -1);
+  return valid.length ? valid : SECTIONS.slice();
+}
+
 function toCsv_(headers, rows) {
   const esc = v => {
     const s = v === null || v === undefined ? '' : (v instanceof Date ? v.toISOString() : String(v));
@@ -567,8 +676,8 @@ function toCsv_(headers, rows) {
 // ---------------------------------------------------------------------------
 // Menu reports
 // ---------------------------------------------------------------------------
-function writeReport_(tabName, headers, rows) {
-  const ss = SpreadsheetApp.getActive();
+function writeReport_(tabName, headers, rows, book) {
+  const ss = book || SpreadsheetApp.getActive();
   let sh = ss.getSheetByName(tabName);
   if (!sh) sh = ss.insertSheet(tabName);
   sh.clearContents();
@@ -672,19 +781,25 @@ function groupBy_(rows, key) {
 function round_(x) { return Math.round(x * 1000) / 1000; }
 
 // ---------------------------------------------------------------------------
-// Moving Users, blocks and help into a separate "Users & Setup" sheet.
+// Moving tabs into a separate, connected spreadsheet:
+//   'setup' — Users, BlockVarieties, HelpReference  ("Users & Setup")
+//   'plant' — PlantChecks                           ("Plant Health")
 // Copies, checks the copy, and only then switches over. The original tabs are
 // renamed "OLD … (moved – delete)" and hidden, never deleted by the script.
 // ---------------------------------------------------------------------------
-function connectSetupSheet() {
+function connectSetupSheet() { connectSheetPrompt_('setup'); }
+function connectPlantSheet() { connectSheetPrompt_('plant'); }
+
+function connectSheetPrompt_(kind) {
+  const cfg = LINKED_SHEETS[kind];
   const ui = SpreadsheetApp.getUi();
-  const res = ui.prompt('Connect Users & Setup sheet',
-    'Create a new, empty Google Sheet (e.g. "Hop Farm – Users & Setup") and paste its address here.\n\n' +
-    'Users, blocks and help text will be copied into it and checked. Samples and leaves stay in this sheet.',
+  const res = ui.prompt('Connect ' + cfg.title + ' sheet',
+    'Create a new, empty Google Sheet (e.g. "Hop Farm – ' + cfg.title + '") and paste its address here.\n\n' +
+    'These tabs will be moved into it and checked: ' + cfg.tables.join(', ') + '.',
     ui.ButtonSet.OK_CANCEL);
   if (res.getSelectedButton() !== ui.Button.OK) return;
   try {
-    ui.alert('Users & Setup sheet connected', connectSetupSheet_(res.getResponseText()), ui.ButtonSet.OK);
+    ui.alert(cfg.title + ' sheet connected', connectSheet_(kind, res.getResponseText()), ui.ButtonSet.OK);
   } catch (e) {
     ui.alert('Not connected', e.message, ui.ButtonSet.OK);
   }
@@ -698,14 +813,23 @@ function sheetIdFromUrl_(text) {
   throw new Error('That does not look like a Google Sheets address. Copy it from the browser address bar of the new sheet.');
 }
 
+function connectSetupSheet_(urlOrId) { return connectSheet_('setup', urlOrId); }
+function connectPlantSheet_(urlOrId) { return connectSheet_('plant', urlOrId); }
+
 /** Returns a summary for the user. Throws (changing nothing) if anything looks wrong. */
-function connectSetupSheet_(urlOrId) {
+function connectSheet_(kind, urlOrId) {
+  const cfg = LINKED_SHEETS[kind];
   const main = SpreadsheetApp.getActive();
   const id = sheetIdFromUrl_(urlOrId);
-  if (id === main.getId()) throw new Error('That is this sheet. Create a new, separate Google Sheet for Users & Setup.');
-  const current = setupSheetId_();
+  if (id === main.getId()) throw new Error('That is this sheet. Create a new, separate Google Sheet for ' + cfg.title + '.');
+  for (const other in LINKED_SHEETS) {
+    if (other !== kind && linkedSheetId_(other) === id) {
+      throw new Error('That sheet is already connected as the ' + LINKED_SHEETS[other].title + ' sheet. Use a new, separate sheet.');
+    }
+  }
+  const current = linkedSheetId_(kind);
   if (current === id) return 'This sheet is already connected. Nothing changed.';
-  if (current) throw new Error('A different Users & Setup sheet is already connected. Nothing changed.');
+  if (current) throw new Error('A different ' + cfg.title + ' sheet is already connected. Nothing changed.');
   let dest;
   try {
     dest = SpreadsheetApp.openById(id);
@@ -717,10 +841,10 @@ function connectSetupSheet_(urlOrId) {
   lock.waitLock(30000);
   try {
     // 1. Check everything before changing anything.
-    const plan = SETUP_TABLES.map(name => {
+    const plan = cfg.tables.map(name => {
       const src = main.getSheetByName(name);
       const srcRows = readSheetObjects_(src);
-      if (srcRows.length && readSheetObjects_(dest.getSheetByName(name)).length) {
+      if (readSheetObjects_(dest.getSheetByName(name)).length) {
         throw new Error('The new sheet already has data in "' + name + '". Use an empty sheet. Nothing changed.');
       }
       return { name: name, src: src, srcRows: srcRows, srcHeaders: src ? headersOf_(src).filter(h => h !== '') : [] };
@@ -746,22 +870,27 @@ function connectSetupSheet_(urlOrId) {
       }
       summary.push('• ' + p.name + ': ' + p.srcRows.length + ' row' + (p.srcRows.length === 1 ? '' : 's') + ' copied and checked');
     });
-    ensureSheet_(dest, 'AuditLog', SCHEMA.AuditLog);
+    cfg.extraTabs.forEach(t => ensureSheet_(dest, t, SCHEMA[t]));
 
     // 3. Switch over, then retire the old tabs.
-    PropertiesService.getScriptProperties().setProperty(SETUP_SHEET_PROP, id);
-    setupSsCache_ = null;
+    PropertiesService.getScriptProperties().setProperty(cfg.prop, id);
+    delete linkedSsCache_[kind];
+    const retired = [];
     plan.forEach(p => {
       if (!p.src) return;
       p.src.setName('OLD ' + p.name + ' (moved – delete)');
       p.src.hideSheet();
+      retired.push(p.name);
     });
     setupHopFarmWorkbook(); // formats and validation in the new sheet; seeds any empty tab
 
+    const what = kind === 'setup' ? 'users, blocks and help' : 'plant health checks';
     return summary.join('\n') +
-      '\n\nThe app now reads users, blocks and help from the new sheet.' +
-      '\n\nThe old tabs here were renamed "OLD … (moved – delete)" and hidden. Check the new sheet, then delete them ' +
-      '(View → Hidden sheets) so the access codes are no longer in this file.';
+      '\n\nThe app now reads and saves ' + what + ' in the new sheet.' +
+      (retired.length
+        ? '\n\nThe old tabs here were renamed "OLD … (moved – delete)" and hidden. Check the new sheet, then delete them ' +
+          '(View → Hidden sheets)' + (kind === 'setup' ? ' so the access codes are no longer in this file.' : '.')
+        : '');
   } finally {
     lock.releaseLock();
   }
