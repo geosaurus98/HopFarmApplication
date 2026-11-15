@@ -12,6 +12,10 @@ Mite monitoring for the hop garden: **record sample bags in the field (offline)
 
 👉 **To set it up, follow [docs/setup-guide.md](docs/setup-guide.md)** (about 30 minutes, no coding).
 
+**Live and test.** The `main` branch is the workers' live app. Changes are built
+and tried in a separate test copy (test app, test server, test sheets) before
+release. See [docs/release-process.md](docs/release-process.md).
+
 ## What it does
 
 | Spec | Feature |
@@ -35,7 +39,7 @@ Mite monitoring for the hop garden: **record sample bags in the field (offline)
 | `apps-script/` | Google Sheets backend: `Setup.gs` (tabs, menu, reports) and `Api.gs` (the web API) |
 | `templates/` | CSV headers and example data for each tab |
 | `tools/` | Python: leaf-target calculator and a CSV → one-row-per-leaf/summary converter |
-| `docs/` | [Setup guide](docs/setup-guide.md), [data model](docs/data-model.md), [decisions and open questions](docs/decisions.md) |
+| `docs/` | [Setup guide](docs/setup-guide.md), [release process](docs/release-process.md), [plant health](docs/plant-health-plan.md), [data model](docs/data-model.md), [decisions and open questions](docs/decisions.md) |
 | `tests/` | Unit, backend and end-to-end browser tests |
 
 ## Development

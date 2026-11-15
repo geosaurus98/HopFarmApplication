@@ -20,7 +20,7 @@ const INITIAL_LEAF_HISTORY_DAYS = 400;     // leaves cached on a device on first
 const PHOTO_FOLDER_NAME = 'Hop Farm Photos';
 
 function doGet() {
-  return json_({ ok: true, app: 'Hop Farm API', version: API_VERSION });
+  return json_({ ok: true, app: 'Hop Farm API', version: API_VERSION, environment: environment_() });
 }
 
 function doPost(e) {
@@ -33,7 +33,7 @@ function doPost(e) {
   try {
     const user = authenticate_(body.login || body.email, body.code);
     switch (body.action) {
-      case 'login': return json_({ ok: true, user: publicUser_(user), version: API_VERSION });
+      case 'login': return json_({ ok: true, user: publicUser_(user), version: API_VERSION, environment: environment_() });
       case 'pull': return json_(Object.assign({ ok: true }, pull_(user, body.since)));
       case 'push': return json_(Object.assign({ ok: true }, push_(user, body.ops || [])));
       case 'uploadPhoto': return json_(Object.assign({ ok: true }, uploadPhoto_(user, body)));
@@ -130,6 +130,7 @@ function pull_(user, since) {
 
   return {
     serverTime: now.toISOString(),
+    environment: environment_(),
     user: publicUser_(user),
     users: readTable_('Users').map(publicUser_),
     blocks: readTable_('BlockVarieties').map(serializeRow_),

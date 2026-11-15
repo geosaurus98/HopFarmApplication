@@ -1,5 +1,24 @@
-// Default server address shown on the sign-in screen. Paste the Apps Script
-// web app URL (ending in /exec) here before publishing, or type it on the
-// sign-in screen — it is remembered on each device.
-export const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxMkGICFRtKopeH2SK4jMVYpHJdedSKOaAWREMt3El9mJVODePt-fgsnyxD1XycFy-X/exec';
-export const APP_VERSION = '1.2.0';
+// Which server the app uses by default, depending on where it is opened.
+//
+//  LIVE app  (the workers' address, built from the `main` branch)  → LIVE server
+//  TEST app  (any other address: test branch deploys, previews, this computer)
+//            → TEST server, and an orange "TEST VERSION" bar on every screen.
+//
+// The test app never defaults to the live server, so testing can't touch the
+// real data by accident.
+
+/** Addresses where the workers' (live) app is served. Add a custom domain here if you set one up. */
+export const LIVE_HOSTS = ['peppy-pie-7f7463.netlify.app'];
+
+/** Live server: the Apps Script deployment attached to the real Hop Farm Data sheet. */
+export const LIVE_API_URL = 'https://script.google.com/macros/s/AKfycbxMkGICFRtKopeH2SK4jMVYpHJdedSKOaAWREMt3El9mJVODePt-fgsnyxD1XycFy-X/exec';
+
+/** Test server: the deployment attached to the TEST copy of Hop Farm Data. Paste it here once it exists. */
+export const TEST_API_URL = '';
+
+export const IS_LIVE_APP = typeof location !== 'undefined' && LIVE_HOSTS.includes(location.hostname);
+
+/** Default server address shown on the sign-in screen (people can still type another). */
+export const DEFAULT_API_URL = IS_LIVE_APP ? LIVE_API_URL : TEST_API_URL;
+
+export const APP_VERSION = '1.3.0';

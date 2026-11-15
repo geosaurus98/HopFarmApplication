@@ -12,6 +12,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 
 function startServer(port = 0) {
   const g = createSeededGas({ split: true }); // Users & Setup in its own sheet, as deployed
+  g.props.ENVIRONMENT = 'TEST'; // the local server is a test server
   const server = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/api') {
       let body = '';

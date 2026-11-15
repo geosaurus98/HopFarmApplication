@@ -54,8 +54,9 @@ test('field collection offline, sync, leaf-by-leaf analysis, completion, export'
     await page.waitForSelector('#login');
     await page.fill('#login', 'cole');
     await page.fill('#code', '999999');
-    assert.match(await page.inputValue('#apiUrl'), /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/, 'farm server is the default');
-    await page.click('summary:has-text("Server address")');
+    // Opened from a test address: the LIVE server is never filled in by default.
+    assert.equal(await page.inputValue('#apiUrl'), '', 'test app does not default to the live server');
+    if (!(await page.isVisible('#apiUrl'))) await page.click('summary:has-text("Server address")');
     await page.fill('#apiUrl', '/api');
     await page.click('button:has-text("Sign in")');
     await page.waitForSelector('text=not recognised');

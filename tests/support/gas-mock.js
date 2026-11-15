@@ -44,6 +44,8 @@ function makeBook(id, tz) {
     id,
     sheets: {},
     getId: () => id,
+    getName: () => book.name || id,
+    getUrl: () => `https://docs.google.com/spreadsheets/d/${id}/edit`,
     getSheetByName: (n) => book.sheets[n] || null,
     insertSheet: (n) => (book.sheets[n] = makeSheet(n, book)),
     getSheets: () => Object.values(book.sheets),
@@ -119,7 +121,7 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
   const dir = path.join(__dirname, '..', '..', 'apps-script');
   // Apps Script runs files in the editor's order, which the user controls; test both orders.
   const src = fileOrder.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
-  const exportsList = ['setupHopFarmWorkbook', 'connectSetupSheet_', 'connectPlantSheet_', 'buildPlantExport', 'PLANT_OPTIONS', 'PLANT_EXPORT_HEADERS', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
+  const exportsList = ['setupHopFarmWorkbook', 'setUpTestCopy_', 'connectionsSummary_', 'connectSetupSheet_', 'connectPlantSheet_', 'buildPlantExport', 'PLANT_OPTIONS', 'PLANT_EXPORT_HEADERS', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
     'doGet', 'doPost', 'requiredLeaves', 'seasonOf', 'weekStarting', 'SCHEMA', 'REPORT_TABS', 'LEAF_EXPORT_HEADERS', 'SUMMARY_HEADERS'];
   const gs = new Function(...Object.keys(globals), `${src}\n;return {${exportsList.join(',')}};`)(...Object.values(globals));
 

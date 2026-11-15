@@ -151,7 +151,7 @@ async function pull() {
     else await db.put('plantChecks', c);
   }
   const session = await db.getMeta('session');
-  if (session && data.user) await db.setMeta('session', { ...session, user: data.user });
+  if (session && data.user) await db.setMeta('session', { ...session, user: data.user, environment: data.environment || session.environment || '' });
   await db.setMeta('lastPull', data.serverTime);
 }
 

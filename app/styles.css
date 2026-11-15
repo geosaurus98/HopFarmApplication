@@ -287,3 +287,7 @@ td.nonzero { font-weight: 700; }
 .help-thumb img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; object-position: top; border-radius: 8px; border: 1px solid var(--line); }
 table.timeline td, table.timeline th { text-align: center; white-space: nowrap; }
 table.timeline td:first-child, table.timeline th:first-child { text-align: left; }
+
+/* ---------- Live / test ---------- */
+.env-banner { background: #f3b229; color: #2b1d00; font-weight: 700; text-align: center; padding: .45rem 1rem; font-size: .9rem; }
+.env-banner.danger { background: var(--red); color: #fff; }

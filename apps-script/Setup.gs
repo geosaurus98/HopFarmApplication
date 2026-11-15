@@ -203,6 +203,9 @@ function onOpen() {
     .addSeparator()
     .addItem('Connect Users & Setup sheet…', 'connectSetupSheet')
     .addItem('Connect Plant Health sheet…', 'connectPlantSheet')
+    .addSeparator()
+    .addItem('Set up as TEST copy…', 'setUpTestCopy')
+    .addItem('Show which sheets this script uses', 'showConnections')
     .addToUi();
 }
 
@@ -894,4 +897,88 @@ function connectSheet_(kind, urlOrId) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Live and test copies.
+// The workers use the LIVE spreadsheets and script. For development and
+// testing, the three spreadsheets are copied (File → Make a copy) and the
+// copy of Hop Farm Data is set up as a TEST copy: it is marked TEST (the app
+// then shows a TEST banner) and linked to the TEST copies of Users & Setup
+// and Plant Health, so nothing done in testing can touch the live sheets.
+// ---------------------------------------------------------------------------
+const ENV_PROP = 'ENVIRONMENT';
+
+/** 'TEST' for a test copy, otherwise 'LIVE'. */
+function environment_() {
+  return PropertiesService.getScriptProperties().getProperty(ENV_PROP) === 'TEST' ? 'TEST' : 'LIVE';
+}
+
+function setUpTestCopy() {
+  const ui = SpreadsheetApp.getUi();
+  const ok = ui.alert('Set up as TEST copy',
+    'Only do this in a COPY of Hop Farm Data, never in the live sheet.\n\n' +
+    'You will need the addresses of your TEST copies of "Users & Setup" and "Plant Health".\n\nContinue?',
+    ui.ButtonSet.YES_NO);
+  if (ok !== ui.Button.YES) return;
+  const a = ui.prompt('TEST Users & Setup', 'Paste the address of the TEST copy of Users & Setup:', ui.ButtonSet.OK_CANCEL);
+  if (a.getSelectedButton() !== ui.Button.OK) return;
+  const b = ui.prompt('TEST Plant Health', 'Paste the address of the TEST copy of Plant Health:', ui.ButtonSet.OK_CANCEL);
+  if (b.getSelectedButton() !== ui.Button.OK) return;
+  try {
+    ui.alert('TEST copy ready', setUpTestCopy_(a.getResponseText(), b.getResponseText()), ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Not changed', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Mark this spreadsheet's script as TEST and link it to the given (already
+ * populated) test copies, replacing any links copied over from the live sheet.
+ * Checks each sheet has the expected tabs and is not the one currently linked
+ * (which, in a fresh copy, is the LIVE sheet).
+ */
+function setUpTestCopy_(setupUrl, plantUrl) {
+  const main = SpreadsheetApp.getActive();
+  const props = PropertiesService.getScriptProperties();
+  const targets = { setup: sheetIdFromUrl_(setupUrl), plant: sheetIdFromUrl_(plantUrl) };
+  if (targets.setup === targets.plant) throw new Error('Users & Setup and Plant Health must be two different sheets.');
+  const need = { setup: 'Users', plant: 'PlantChecks' };
+  Object.keys(targets).forEach(kind => {
+    const id = targets[kind];
+    if (id === main.getId()) throw new Error('That is this sheet. Use the TEST copy of ' + LINKED_SHEETS[kind].title + '.');
+    if (id === linkedSheetId_(kind)) {
+      throw new Error('That ' + LINKED_SHEETS[kind].title + ' sheet is the one already linked, which in a fresh copy is the LIVE sheet. ' +
+        'Make a copy of it (File → Make a copy) and use the copy. Nothing changed.');
+    }
+    let book;
+    try { book = SpreadsheetApp.openById(id); } catch (e) {
+      throw new Error('Could not open the ' + LINKED_SHEETS[kind].title + ' sheet. Check the address. Nothing changed.');
+    }
+    if (!book.getSheetByName(need[kind])) {
+      throw new Error('The ' + LINKED_SHEETS[kind].title + ' sheet has no "' + need[kind] + '" tab. Use a copy of the live ' +
+        LINKED_SHEETS[kind].title + ' sheet. Nothing changed.');
+    }
+  });
+  props.setProperty(ENV_PROP, 'TEST');
+  props.setProperty(SETUP_SHEET_PROP, targets.setup);
+  props.setProperty(PLANT_SHEET_PROP, targets.plant);
+  Object.keys(linkedSsCache_).forEach(k => delete linkedSsCache_[k]);
+  setupHopFarmWorkbook();
+  return 'This copy is now a TEST copy, linked to:\n• Users & Setup: ' + linkedSs_('setup').getName() +
+    '\n• Plant Health: ' + linkedSs_('plant').getName() +
+    '\n\nNext: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone) and use that address ' +
+    'in the TEST app only.';
+}
+
+/** Which spreadsheets this script reads and writes, and whether it is LIVE or TEST. */
+function connectionsSummary_() {
+  const main = SpreadsheetApp.getActive();
+  const line = (label, book) => '• ' + label + ': ' + (book ? book.getName() + '\n   ' + book.getUrl() : '(not connected — kept in this sheet)');
+  return 'This script is the ' + environment_() + ' server.\n\n' +
+    line('Mite data (this sheet)', main) + '\n' + line('Users & Setup', setupSs_()) + '\n' + line('Plant Health', linkedSs_('plant'));
+}
+
+function showConnections() {
+  SpreadsheetApp.getUi().alert('Hop Farm sheets', connectionsSummary_(), SpreadsheetApp.getUi().ButtonSet.OK);
 }

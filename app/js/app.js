@@ -3,7 +3,7 @@ import * as L from './logic.js';
 import { STATUS, COUNT_FIELDS, can } from './logic.js';
 import { api, sync, syncSoon, onStatus, refreshCounts, startAutoSync, fetchLeaves, AuthError, OfflineError, getStatus } from './sync.js';
 import { h, svg, mount, toast, confirmDialog, fmtDate, fmtDateTime, fmtAgo, pct, download, field, statusPill, progressBar, clearErrorsOnEdit } from './ui.js';
-import { DEFAULT_API_URL, APP_VERSION } from './config.js';
+import { DEFAULT_API_URL, APP_VERSION, IS_LIVE_APP, LIVE_API_URL } from './config.js';
 import { initPlant, plantRoutes } from './plant.js';
 
 const main = () => document.getElementById('main');
@@ -48,7 +48,31 @@ async function boot() {
   }
 }
 
+/**
+ * Make it obvious when this is not the workers' live app, and warn loudly if a
+ * test app has been pointed at the live server (or the live app at a test server).
+ */
+function renderEnvBanner() {
+  document.getElementById('envBanner')?.remove();
+  const serverEnv = session?.environment || '';
+  const onLiveServer = session?.apiUrl === LIVE_API_URL || serverEnv === 'LIVE';
+  let text = '';
+  let cls = 'env-banner';
+  if (!IS_LIVE_APP && session && onLiveServer) {
+    text = '⚠ TEST VERSION of the app, but connected to the LIVE server — changes here affect the real data. Sign out and use the test server.';
+    cls += ' danger';
+  } else if (IS_LIVE_APP && serverEnv === 'TEST') {
+    text = '⚠ This is the workers\' app connected to the TEST server — records saved here go to the test sheets.';
+    cls += ' danger';
+  } else if (!IS_LIVE_APP) {
+    text = `TEST VERSION ${APP_VERSION} — for trying out changes${serverEnv === 'TEST' ? ' · test data' : ''}. Workers use the live app.`;
+  }
+  if (!text) return;
+  document.getElementById('header').before(h('div', { id: 'envBanner', class: cls, role: 'status' }, text));
+}
+
 function renderHeader() {
+  renderEnvBanner();
   const header = document.getElementById('header');
   mount(header,
     h('a', { class: 'brand', href: '#/' }, h('img', { src: 'icons/icon.svg', alt: '' }), h('span', {}, 'Hop Farm')),
@@ -188,7 +212,7 @@ async function viewLogin() {
     btn.disabled = true;
     btn.textContent = 'Signing in…';
     try {
-      const { user } = await api('login', {}, creds);
+      const { user, environment } = await api('login', {}, creds);
       // A different person signing in on this tablet must not inherit someone else's queue.
       const prev = await db.getMeta('lastLogin');
       const pending = await db.count('outbox');
@@ -196,7 +220,7 @@ async function viewLogin() {
       if (prevEmail && prevEmail.toLowerCase() !== user.UserEmail.toLowerCase() && pending > 0) {
         throw new Error(`This tablet still has ${pending} change(s) from ${prev.name || prevEmail} waiting to upload. Ask them to sign in and sync first.`);
       }
-      session = { ...creds, user };
+      session = { ...creds, user, environment: environment || '' };
       await db.setMeta('session', session);
       await db.setMeta('lastLogin', { apiUrl: creds.apiUrl, login: creds.login, userEmail: user.UserEmail, name: displayName(user) });
       renderHeader();

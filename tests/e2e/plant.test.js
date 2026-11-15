@@ -45,6 +45,9 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
 
   try {
     await signIn('cole', '222222');
+    // Not the workers' address, and a test server: orange TEST bar, no warning.
+    assert.match(await page.textContent('#envBanner'), /TEST VERSION .* test data/);
+    assert.equal(await page.isVisible('#envBanner.danger'), false);
     // Both sections on the home screen for someone with access to both.
     assert.ok(await page.isVisible('h2.section-heading:has-text("Mite Monitoring")'));
     assert.ok(await page.isVisible('h2.section-heading:has-text("Plant Health")'));
@@ -204,6 +207,14 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
     }
     await page.goto(`${url}/#/plant/new`);
     await shot('plant-03-phone', { fullPage: true });
+
+    // A test app pointed at a LIVE server gets a red warning.
+    await page.setViewportSize({ width: 1024, height: 700 });
+    await signOut();
+    g.props.ENVIRONMENT = 'LIVE';
+    await signIn('cole', '222222');
+    assert.match(await page.textContent('#envBanner.danger'), /connected to the LIVE server/);
+    g.props.ENVIRONMENT = 'TEST';
 
     assert.deepEqual(errors, []);
   } finally {

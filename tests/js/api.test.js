@@ -609,3 +609,35 @@ test('Plant Health sheet: connecting moves existing checks and refuses the Users
   g.gs.buildPlantExport();
   assert.equal(g.table('Export_PlantChecks', plant).length, 2);
 });
+
+test('live and test copies: environment, and a test copy links only to test sheets', () => {
+  const g = createSeededGas({ split: true });
+  assert.equal(g.post({ action: 'login', ...LAB }).environment, 'LIVE');
+  assert.equal(g.post({ action: 'pull', ...LAB }).environment, 'LIVE');
+  assert.match(g.gs.connectionsSummary_(), /This script is the LIVE server/);
+
+  // A fresh copy of Hop Farm Data still points at the LIVE Users & Setup / Plant Health sheets.
+  const liveSetup = g.props.SETUP_SHEET_ID;
+  const livePlant = g.props.PLANT_SHEET_ID;
+  const url = (id) => `https://docs.google.com/spreadsheets/d/${id}/edit`;
+  assert.throws(() => g.gs.setUpTestCopy_(url(liveSetup), url(livePlant)), /LIVE sheet/);
+  const empty = g.newBook('EMPTY_SHEET_ID_00000000000000');
+  const testSetup = g.newBook('TEST_SETUP_ID_000000000000000');
+  testSetup.name = 'TEST Users & Setup';
+  testSetup.insertSheet('Users').getRange(1, 1, 3, 5).setValues([
+    ['UserEmail', 'Username', 'Role', 'Active', 'AccessCode'], ['lab@farm.nz', 'lee', 'Analyst', true, '999999'], ['admin@farm.nz', 'ana', 'Administrator', true, '888888']]);
+  testSetup.insertSheet('BlockVarieties').getRange(1, 1, 2, 5).setValues([['BlockVarietyID', 'Block', 'Variety', 'AreaHa', 'Active'], ['T1-TEST', 'T1', 'Test', 5, true]]);
+  const testPlant = g.newBook('TEST_PLANT_ID_000000000000000');
+  testPlant.name = 'TEST Plant Health';
+  testPlant.insertSheet('PlantChecks').getRange(1, 1, 1, 1).setValues([['CheckID']]);
+  assert.throws(() => g.gs.setUpTestCopy_(url(empty.id), url(testPlant.id)), /no "Users" tab/);
+  assert.throws(() => g.gs.setUpTestCopy_(url(testPlant.id), url(testPlant.id)), /two different sheets/);
+  assert.equal(g.props.SETUP_SHEET_ID, liveSetup, 'nothing changed after refusals');
+
+  const msg = g.gs.setUpTestCopy_(url(testSetup.id), url(testPlant.id));
+  assert.match(msg, /TEST copy, linked to:\n• Users & Setup: TEST Users & Setup\n• Plant Health: TEST Plant Health/);
+  assert.equal(g.post({ action: 'login', login: 'lee', code: '999999' }).environment, 'TEST', 'test users and codes');
+  assert.equal(g.post({ action: 'login', ...LAB }).ok, false, 'live codes no longer apply');
+  assert.deepEqual(g.post({ action: 'pull', login: 'lee', code: '999999' }).blocks.map((b) => b.BlockVarietyID), ['T1-TEST']);
+  assert.match(g.gs.connectionsSummary_(), /This script is the TEST server/);
+});
