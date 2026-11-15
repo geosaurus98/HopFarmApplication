@@ -150,6 +150,8 @@ async function renderNow() {
       try {
         await fn(...m.slice(1));
       } catch (e) {
+        // Signed out while this screen was still loading: the sign-in screen takes over.
+        if (needsAuth && !session) return;
         console.error(e);
         mount(main(), h('div', { class: 'card' }, h('h2', {}, 'Something went wrong'), h('p', {}, e.message),
           h('a', { class: 'btn primary', href: '#/' }, 'Home')));
@@ -1230,6 +1232,7 @@ async function viewUserForm(id) {
 let lastSyncResult = null;
 
 async function viewSync() {
+  const current = session;
   const outbox = await db.getAll('outbox');
   const photos = await db.getAll('photos');
   const st = getStatus();
@@ -1280,10 +1283,10 @@ async function viewSync() {
         }, 'Discard')))) : null,
     h('section', { class: 'card' },
       h('h2', {}, 'Account'),
-      h('div', { class: 'kv' }, h('span', {}, 'Signed in as'), h('strong', {}, `${displayName(session.user)}${session.user.Username ? ` (${session.user.Username})` : ''}`)),
-      h('div', { class: 'kv' }, h('span', {}, 'Email'), h('strong', {}, session.user.UserEmail)),
-      h('div', { class: 'kv' }, h('span', {}, 'Role'), h('strong', {}, session.user.Role)),
-      h('div', { class: 'kv' }, h('span', {}, 'Server'), h('span', { class: 'small break' }, session.apiUrl)),
+      h('div', { class: 'kv' }, h('span', {}, 'Signed in as'), h('strong', {}, `${displayName(current.user)}${current.user.Username ? ` (${current.user.Username})` : ''}`)),
+      h('div', { class: 'kv' }, h('span', {}, 'Email'), h('strong', {}, current.user.UserEmail)),
+      h('div', { class: 'kv' }, h('span', {}, 'Role'), h('strong', {}, current.user.Role)),
+      h('div', { class: 'kv' }, h('span', {}, 'Server'), h('span', { class: 'small break' }, current.apiUrl)),
       h('div', { class: 'kv' }, h('span', {}, 'App version'), h('span', {}, APP_VERSION)),
       h('button', {
         class: 'btn danger-outline', type: 'button', onclick: async () => {
@@ -1296,7 +1299,7 @@ async function viewSync() {
             await db.setMeta('session', null);
           } else {
             await db.wipe();
-            await db.setMeta('lastLogin', { apiUrl: session.apiUrl, login: session.login || session.email, userEmail: session.user.UserEmail, name: displayName(session.user) });
+            await db.setMeta('lastLogin', { apiUrl: current.apiUrl, login: current.login || current.email, userEmail: current.user.UserEmail, name: displayName(current.user) });
           }
           session = null;
           renderHeader();
