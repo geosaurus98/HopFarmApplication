@@ -129,3 +129,35 @@ export function clearErrorsOnEdit(form) {
   form.addEventListener('change', clear);
   form.addEventListener('click', clear);
 }
+
+/**
+ * Dialog with several choices. `choices`: [{ label, value, kind }] (kind: 'primary' | 'secondary' | 'danger').
+ * Resolves with the chosen value, or null if dismissed.
+ */
+export function choiceDialog(title, message, choices) {
+  return new Promise((resolve) => {
+    const dlg = h('dialog', { class: 'dialog' },
+      h('h2', {}, title),
+      message ? h('p', {}, message) : null,
+      h('div', { class: 'row end wrap' }, choices.map((c) => h('button', {
+        class: `btn ${c.kind || 'secondary'}`, type: 'button', 'data-choice': c.value, onclick: () => close(c.value),
+      }, c.label))));
+    function close(v) { dlg.close(); dlg.remove(); resolve(v); }
+    dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(null); });
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
+
+/** Large dialog showing other content (e.g. help) over the current screen, without leaving it. */
+export function contentDialog(title, ...children) {
+  const dlg = h('dialog', { class: 'dialog wide-dialog' },
+    h('div', { class: 'row', style: { justifyContent: 'space-between' } },
+      h('h2', { style: { margin: 0 } }, title),
+      h('button', { class: 'btn secondary small', type: 'button', onclick: () => { dlg.close(); dlg.remove(); } }, 'Close')),
+    ...children);
+  dlg.addEventListener('cancel', (e) => { e.preventDefault(); dlg.close(); dlg.remove(); });
+  document.body.append(dlg);
+  dlg.showModal();
+  return dlg;
+}

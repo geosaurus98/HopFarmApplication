@@ -105,6 +105,9 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
     Utilities: {
       getUuid: () => require('crypto').randomUUID(),
       base64Decode: (b64) => Array.from(Buffer.from(b64, 'base64')),
+      base64Encode: (bytes) => Buffer.from(bytes.map((b) => (b + 256) % 256)).toString('base64'),
+      DigestAlgorithm: { SHA_256: 'sha256' },
+      computeDigest: (alg, text) => Array.from(require('crypto').createHash(alg).update(String(text)).digest()).map((b) => (b > 127 ? b - 256 : b)),
       newBlob: (bytes, type, name) => ({ bytes, type, name }),
       formatDate: (d, zone, fmt) => {
         const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
@@ -127,7 +130,7 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
 
   // Tabs are looked up in whichever spreadsheet now holds them.
   const bookOf = (name) => {
-    const linked = ['Users', 'BlockVarieties', 'HelpReference'].includes(name) ? props.SETUP_SHEET_ID
+    const linked = ['Users', 'Devices', 'BlockVarieties', 'HelpReference'].includes(name) ? props.SETUP_SHEET_ID
       : name === 'PlantChecks' || name === 'Export_PlantChecks' ? props.PLANT_SHEET_ID : null;
     return (linked && books[linked] && books[linked].sheets[name]) ? books[linked] : ss;
   };
@@ -152,8 +155,9 @@ function createSeededGas(opts = {}) {
   g.gs.setupHopFarmWorkbook();
   g.sheets.Users.data.length = 1; // replace the auto-created admin with known users
   const now = new Date();
-  [['admin@farm.nz', 'ana', 'Ana Admin', 'Administrator', '111111'], ['col@farm.nz', 'cole', 'Cole Collector', 'Collector', '222222'],
-    ['lab@farm.nz', 'lee', 'Lee Analyst', 'Analyst', '333333'], ['gone@farm.nz', 'old', 'Old Staff', 'Analyst', '444444', false]]
+  [['admin@farm.nz', 'ana', 'Ana Admin', 'Owner', '111111'], ['col@farm.nz', 'cole', 'Cole Collector', 'User', '222222'],
+    ['lab@farm.nz', 'lee', 'Lee Analyst', 'User', '333333'], ['gone@farm.nz', 'old', 'Old Staff', 'User', '444444', false],
+    ['boss@farm.nz', 'bea', 'Bea Boss', 'Admin', '555000']]
     .forEach(([e, u, n, r, c, active = true]) => g.addRow('Users', { UserEmail: e, Username: u, FullName: n, Role: r, Active: active, AccessCode: c, CreatedAt: now, UpdatedAt: now }));
   if (opts.split) {
     g.setup = g.newBook('SETUP_SHEET_ID_000000000000000');

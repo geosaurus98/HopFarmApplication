@@ -7,7 +7,7 @@
 | **Offline-first web app** (installable on tablets, no app store) instead of AppSheet | The client does not use AppSheet. A web app runs on any tablet, laptop or desktop, works fully offline, and is all code, so it can be tested automatically and kept in version control. |
 | **Google Sheets as the database**, with Google Apps Script as the API | Free, familiar, and the data stays readable, filterable and downloadable as a normal spreadsheet. Suits the expected volume of tens of thousands of leaf rows per season. If it outgrows Sheets, only `apps-script/` needs replacing, for example with Supabase. |
 | No build tools or frameworks | Plain HTML, CSS and JS modules. Anyone can host the `app/` folder, and nothing goes stale. |
-| Sign-in by **username** (or email) + per-person access code, checked against the Users tab. Email stays the internal link between records, so usernames and names can be changed freely. | Google sign-in cannot be used from a separately hosted app talking to Apps Script without extra Google Cloud setup. Codes are simple to issue and revoke. |
+| **Shared tablets:** an admin/owner sets each tablet up once, then workers tap their name (or add themselves). No passwords for workers. Admins and owners sign in with username + access code. Every queued change records who made it and is checked against that person when it uploads. Email stays the internal link between records. | Google sign-in cannot be used from a separately hosted app talking to Apps Script without extra Google Cloud setup. Codes are simple to issue and revoke. |
 | Edits are sent as **field-level patches** | Two people changing different fields of the same sample never overwrite each other. |
 | Device keeps everything it needs in IndexedDB; changes are queued in the same transaction as the save | A record cannot be saved without also being queued for upload, so nothing is lost if the app is closed or the tablet restarts (§5.5). |
 | The server recomputes block snapshot, leaf target and season | The sheet is always right even if a device has an old block list. |
@@ -18,6 +18,17 @@
 | Decision | Reason |
 |---|---|
 | **Separate Google Sheets:** *Users & Setup* (users, access codes, blocks, help), *Hop Farm Data* (mite monitoring), and later *Plant Health*. One app and one sign-in. | Access codes stay private when data sheets are shared. Each data set can be shared, exported and archived on its own. The block list and users are maintained in one place for both sections. |
+
+## Levels (Nov 2026)
+
+| Level | Can |
+|---|---|
+| **User** | Collect and analyse mite samples, do plant checks. See their own completed analyses and reopen or correct them for 31 days. Cancel samples they collected before analysis starts. |
+| **Admin** | User, plus all completed samples, all samples, reports, exports, data quality, and correcting or reopening any sample at any time. |
+| **Owner** | Admin, plus people, access codes and tablets. Other owners are view-only in the app. |
+
+Earlier roles are upgraded automatically: Collector and Analyst become User,
+Administrator becomes Owner.
 
 ## Client answers (Jason Johnson, July 2026)
 
@@ -44,14 +55,14 @@ The defaults below are built in. Each can be changed in a few lines.
 
 | # | Question | Default implemented | To change |
 |---|---|---|---|
-| D1 | Do count fields default to 0 or stay empty? | **Empty, and every count is required**, so a blank can never be mistaken for zero. The **Blanks → 0** button fills the remaining empty counts with one tap. | Pre-fill `0` in `viewLeaf` (`app/js/app.js`). |
+| D1 | Do count fields default to 0 or stay empty? | **Confirmed (Nov 2026): every count starts at 0**, so only what's seen needs changing. | `leafFormValues` in `logic.js`. |
 | D2 | Duplicate sample-number policy | **Warning only**: same bag number, same season, ignoring cancelled samples. Also listed in the data-quality report. | Turn the warning into an error in `viewSampleForm`. |
 | D3 | Can bag numbers be reused across seasons? | **Yes.** Each sample has its own hidden unique ID, and the season distinguishes reused bag numbers. | — |
 | D4 | Number of photos | **Confirmed:** 2 per sample, 1 per leaf, resized to at most 1600 px before upload. | Add `SamplePhoto3` (sheet column + form). |
 | D5 | Editing completed records | **Confirmed:** for **31 days after completion**, analysts can correct leaf counts, delete leaves, edit the sample's details and reopen the analysis to add leaves. After that only administrators can. The block cannot be changed once analysis starts. Every change to a completed sample goes to **AuditLog** (before → after). | `ANALYST_EDIT_DAYS` in `logic.js` and `Api.gs`. |
-| D6 | Early completion: mandatory reason or warning? | **Confirmed: warning only**, with an optional reason (the client said it must not block completion). Shown in exports and the data-quality report. | Make the reason required in `viewComplete`. |
-| D7 | Order of count fields | **Confirmed by Jason:** PP, 2SM, PP eggs, 2SM eggs, Beneficials. | `COUNT_FIELDS` in `logic.js`. |
-| D8 | Beneficial organism categories | Ladybird (Stethorus), Ladybird (other), Lacewing, Predatory thrips, Predatory midge, Spider, Other (free text). | `BENEFICIAL_TYPES` in `logic.js`. |
+| D6 | Early completion: mandatory reason or warning? | **Confirmed (Nov 2026): a reason must be chosen** when finishing below target. The explanation and comments are optional. Completion is never otherwise blocked. | `viewComplete` in `app.js`. |
+| D7 | Order of count fields | **Leaf screen (Nov 2026):** 2SM \| 2SM eggs, then Dead 2SM \| Eaten 2SM eggs, then PP \| PP eggs, then each beneficial. Exports keep PP, 2SM, PP eggs, 2SM eggs first, then the new columns. | `MAIN_COUNTS` in `logic.js`. |
+| D8 | Beneficial organism categories | **Counted separately (Nov 2026):** Ladybird (Stethorus), Ladybird (other), Lacewing, Predatory thrips, Predatory midge, Spider, Other (with a description). Their sum is kept as the beneficials total for reports. | `BENEFICIAL_COUNTS` in `logic.js`. |
 | D9 | Export formats | CSV (opens in Excel) from the app; Excel or CSV from the Sheet; Python script for CSV downloads. | — |
 | D10 | Plant health methodology | Not built. Proposed model in `data-model.md` §6. | — |
 

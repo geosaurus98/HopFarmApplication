@@ -8,14 +8,53 @@ export const STATUS = Object.freeze({
   CANCELLED: 'Cancelled',
 });
 
-// Order and names as the farm uses them (Jason, July 2026): PP, 2SM, PP eggs, 2SM eggs, beneficials.
-export const COUNT_FIELDS = Object.freeze([
-  { key: 'PhytoseiulusCount', short: 'PP', label: 'Predatory mite', latin: 'Phytoseiulus persimilis' },
-  { key: 'TetranychusCount', short: '2SM', label: 'Two-spotted mite', latin: 'Tetranychus urticae' },
-  { key: 'PredatorEggCount', short: 'PP eggs', label: 'Predator eggs', latin: '' },
-  { key: 'TwoSpotEggCount', short: '2SM eggs', label: 'Two-spotted mite eggs', latin: '' },
-  { key: 'OtherBeneficialCount', short: 'Beneficials', label: 'Other beneficials', latin: 'ladybirds, lacewings…' },
+// Leaf counts, laid out on the leaf screen as the farm asked (Nov 2026):
+//   2SM        | 2SM eggs
+//   Dead 2SM   | Eaten 2SM eggs
+//   PP         | PP eggs
+// then each beneficial type separately. Every count starts at 0.
+export const MAIN_COUNTS = Object.freeze([
+  { key: 'TetranychusCount', short: '2SM', label: 'Two-spotted mite', latin: 'Tetranychus urticae', help: 'mite-2sm' },
+  { key: 'TwoSpotEggCount', short: '2SM eggs', label: 'Two-spotted mite eggs', latin: '', help: 'mite-2sm-eggs' },
+  { key: 'DeadTetranychusCount', short: 'Dead 2SM', label: 'Dead two-spotted mites', latin: '', help: 'mite-dead-2sm' },
+  { key: 'EatenTwoSpotEggCount', short: 'Eaten 2SM eggs', label: 'Eaten two-spotted mite eggs', latin: '', help: 'mite-eaten-eggs' },
+  { key: 'PhytoseiulusCount', short: 'PP', label: 'Predatory mite', latin: 'Phytoseiulus persimilis', help: 'mite-pp' },
+  { key: 'PredatorEggCount', short: 'PP eggs', label: 'Predator eggs', latin: '', help: 'mite-pp-eggs' },
 ]);
+
+/** Beneficials, each counted on its own; their sum is stored as OtherBeneficialCount. */
+export const BENEFICIAL_COUNTS = Object.freeze([
+  { key: 'LadybirdStethorusCount', short: 'Ladybird (Stethorus)', label: 'Ladybird (Stethorus)', help: 'mite-ladybird' },
+  { key: 'LadybirdOtherCount', short: 'Ladybird (other)', label: 'Ladybird (other)', help: 'mite-ladybird' },
+  { key: 'LacewingCount', short: 'Lacewing', label: 'Lacewing', help: 'mite-lacewing' },
+  { key: 'PredatoryThripsCount', short: 'Predatory thrips', label: 'Predatory thrips', help: 'mite-thrips' },
+  { key: 'PredatoryMidgeCount', short: 'Predatory midge', label: 'Predatory midge', help: 'mite-thrips' },
+  { key: 'SpiderCount', short: 'Spider', label: 'Spider', help: 'mite-thrips' },
+  { key: 'BeneficialOtherCount', short: 'Other', label: 'Other beneficial', help: 'mite-thrips' },
+]);
+
+/** Every count entered on the leaf screen. */
+export const LEAF_INPUT_FIELDS = Object.freeze([...MAIN_COUNTS, ...BENEFICIAL_COUNTS]);
+
+/** Columns shown in the leaf table: the six mite counts and the beneficials total. */
+export const COUNT_FIELDS = Object.freeze([
+  ...MAIN_COUNTS,
+  { key: 'OtherBeneficialCount', short: 'Beneficials', label: 'Beneficials (total)', latin: '' },
+]);
+
+export const beneficialTotal = (leaf) => BENEFICIAL_COUNTS.reduce((t, f) => t + (Number(leaf[f.key]) || 0), 0);
+
+/** Values for the leaf screen: 0 for anything not recorded (older leaves map their single beneficial count). */
+export function leafFormValues(leaf) {
+  const out = {};
+  for (const f of LEAF_INPUT_FIELDS) out[f.key] = leaf && leaf[f.key] !== '' && leaf[f.key] != null ? Number(leaf[f.key]) : 0;
+  if (leaf && Number(leaf.OtherBeneficialCount) > 0 && beneficialTotal(out) === 0) {
+    const byName = { 'Ladybird (Stethorus)': 'LadybirdStethorusCount', 'Ladybird (other)': 'LadybirdOtherCount', Lacewing: 'LacewingCount',
+      'Predatory thrips': 'PredatoryThripsCount', 'Predatory midge': 'PredatoryMidgeCount', Spider: 'SpiderCount' };
+    out[byName[leaf.OtherBeneficialDescription] || 'BeneficialOtherCount'] = Number(leaf.OtherBeneficialCount);
+  }
+  return out;
+}
 
 export const BENEFICIAL_TYPES = Object.freeze([
   'Ladybird (Stethorus)', 'Ladybird (other)', 'Lacewing', 'Predatory thrips', 'Predatory midge', 'Spider', 'Other',
@@ -26,7 +65,22 @@ export const EARLY_REASONS = Object.freeze([
 ]);
 
 export const HIGH_COUNT = 100;
-export const ROLES = Object.freeze(['Collector', 'Analyst', 'Administrator']);
+/**
+ * User  — collects and analyses samples, does plant checks; reopens their own analyses (31 days).
+ * Admin — User + all completed / all samples, reports, exports, corrections.
+ * Owner — Admin + people, access codes and tablets.
+ */
+export const ROLES = Object.freeze(['User', 'Admin', 'Owner']);
+const LEGACY_ROLES = { Collector: 'User', Analyst: 'User', Administrator: 'Owner' };
+export const normalizeRole = (r) => LEGACY_ROLES[r] || r || '';
+export const isAdminRole = (r) => ['Admin', 'Owner'].includes(normalizeRole(r));
+export const isOwnerRole = (r) => normalizeRole(r) === 'Owner';
+
+/** Did this person analyse the sample (started or completed it)? */
+export function analysedBy(sample, email) {
+  const me = String(email || '').toLowerCase();
+  return !!me && (String(sample.AnalysisStartedBy || '').toLowerCase() === me || String(sample.CompletedBy || '').toLowerCase() === me);
+}
 
 /** Required Leaves = MAX(50, FLOOR((AreaHa × 10) / 5) × 5). Null for invalid areas. */
 export function requiredLeaves(areaHa) {
@@ -130,7 +184,7 @@ export function parseCount(raw) {
 /** Validate a leaf record. `others` = other live leaves of the same sample. */
 export function validateLeaf(leaf, others = []) {
   const errors = {};
-  for (const f of COUNT_FIELDS) {
+  for (const f of LEAF_INPUT_FIELDS) {
     const r = parseCount(leaf[f.key]);
     if (r.error === 'required') errors[f.key] = 'Enter a count (0 if none seen).';
     else if (r.error === 'negative') errors[f.key] = 'Counts cannot be negative.';
@@ -145,7 +199,7 @@ export function validateLeaf(leaf, others = []) {
 }
 
 export function highCounts(leaf) {
-  return COUNT_FIELDS.filter((f) => Number(leaf[f.key]) > HIGH_COUNT);
+  return LEAF_INPUT_FIELDS.filter((f) => Number(leaf[f.key]) > HIGH_COUNT);
 }
 
 export function validateSample(s, today = todayLocal()) {
@@ -201,6 +255,8 @@ export function sampleSummary(sample, leaves) {
     AvgOtherBeneficialPerLeaf: n ? round3(sum('OtherBeneficialCount') / n) : null,
     PredatorToPestRatio: tsm ? round3(pp / tsm) : null,
     LeavesWithTwoSM: infested,
+    TotalDead2SM: sum('DeadTetranychusCount'),
+    TotalEaten2SMEggs: sum('EatenTwoSpotEggCount'),
     PctLeavesWithTwoSM: n ? round3(infested / n) : null,
   };
 }
@@ -209,7 +265,9 @@ export const LEAF_EXPORT_HEADERS = [
   'SampleID', 'SampleNumber', 'Season', 'CollectionDate', 'WeekStarting', 'Collector', 'Block',
   'Variety', 'AreaHa', 'TargetLeafCount', 'LeafNumber', 'Analyst', 'AnalysisDateTime',
   'PhytoseiulusCount', 'TetranychusCount', 'PredatorEggCount', 'TwoSpotEggCount',
-  'OtherBeneficialCount', 'OtherBeneficialDescription', 'LeafComment', 'SampleComments',
+  'DeadTetranychusCount', 'EatenTwoSpotEggCount', 'OtherBeneficialCount',
+  'LadybirdStethorusCount', 'LadybirdOtherCount', 'LacewingCount', 'PredatoryThripsCount', 'PredatoryMidgeCount',
+  'SpiderCount', 'BeneficialOtherCount', 'OtherBeneficialDescription', 'LeafComment', 'SampleComments',
   'AnalysisComments', 'SampleStatus', 'SamplePhoto1', 'SamplePhoto2', 'LeafPhoto',
 ];
 
@@ -218,7 +276,7 @@ export const SUMMARY_HEADERS = [
   'Status', 'TargetLeafCount', 'LeavesAnalysed', 'BelowTarget',
   'TotalTwoSM', 'AvgTwoSMPerLeaf', 'TotalPP', 'AvgPPPerLeaf',
   'TotalTwoSMEggs', 'TotalPredatorEggs', 'TotalOtherBeneficial',
-  'PredatorToPestRatio', 'LeavesWithTwoSM', 'PctLeavesWithTwoSM', 'EarlyCompletionReason',
+  'PredatorToPestRatio', 'LeavesWithTwoSM', 'PctLeavesWithTwoSM', 'TotalDead2SM', 'TotalEaten2SMEggs', 'EarlyCompletionReason',
 ];
 
 const photoRef = (v) => (String(v || '').startsWith('local:') ? '(not yet uploaded)' : v || '');
@@ -236,7 +294,8 @@ export function leafExportRows(samples, leaves, nameOf = (e) => e) {
       s.SampleID, s.SampleNumber, s.Season || seasonOf(s.CollectionDate), s.CollectionDate, weekStarting(s.CollectionDate),
       nameOf(s.CollectorEmail), s.Block, s.Variety, s.AreaHaAtCollection, s.TargetLeafCount, l.LeafNumber,
       nameOf(l.AnalystEmail), localDateTime(l.AnalysisDateTime), l.PhytoseiulusCount, l.TetranychusCount, l.PredatorEggCount,
-      l.TwoSpotEggCount, l.OtherBeneficialCount, l.OtherBeneficialDescription, l.LeafComment, s.SampleComments,
+      l.TwoSpotEggCount, l.DeadTetranychusCount ?? '', l.EatenTwoSpotEggCount ?? '', l.OtherBeneficialCount,
+      ...BENEFICIAL_COUNTS.map((f) => l[f.key] ?? ''), l.OtherBeneficialDescription, l.LeafComment, s.SampleComments,
       s.AnalysisComments, s.Status, photoRef(s.SamplePhoto1), photoRef(s.SamplePhoto2), photoRef(l.LeafPhoto),
     ]);
 }
@@ -254,7 +313,8 @@ export function summaryRows(samples, leavesBySample) {
         sum.LeavesAnalysed < Number(s.TargetLeafCount) ? 'YES' : 'NO',
         sum.TotalTwoSM, blank(sum.AvgTwoSMPerLeaf), sum.TotalPP, blank(sum.AvgPPPerLeaf),
         sum.TotalTwoSMEggs, sum.TotalPredatorEggs, sum.TotalOtherBeneficial,
-        blank(sum.PredatorToPestRatio), sum.LeavesWithTwoSM, blank(sum.PctLeavesWithTwoSM), s.EarlyCompletionReason || '',
+        blank(sum.PredatorToPestRatio), sum.LeavesWithTwoSM, blank(sum.PctLeavesWithTwoSM),
+        sum.TotalDead2SM, sum.TotalEaten2SMEggs, s.EarlyCompletionReason || '',
       ];
     });
 }
@@ -315,27 +375,33 @@ export function analystEditUntil(sample) {
 
 /** Can this role perform this action on this sample? */
 export function can(role, action, sample = {}, userEmail = '', now = Date.now()) {
-  const admin = role === 'Administrator';
-  const lab = admin || role === 'Analyst';
-  const correctable = lab && recentlyCompleted(sample, now);
+  const r = normalizeRole(role);
+  const user = ROLES.includes(r);
+  const admin = isAdminRole(r);
+  const owner = isOwnerRole(r);
+  // A User may reopen/correct a completed sample they analysed, within 31 days.
+  const correctable = admin || (user && analysedBy(sample, userEmail) && recentlyCompleted(sample, now));
   const own = String(sample.CollectorEmail || '').toLowerCase() === String(userEmail).toLowerCase();
+  const working = [STATUS.DRAFT, STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status);
   switch (action) {
-    case 'createSample': return ROLES.includes(role);
-    case 'editSample': return admin || ([STATUS.DRAFT, STATUS.AWAITING].includes(sample.Status) && (own || lab)) ||
-      (lab && sample.Status === STATUS.IN_PROGRESS) || correctable;
+    case 'createSample': return user;
+    case 'editSample': return admin || (user && working) || (sample.Status === STATUS.COMPLETE && correctable);
     case 'changeBlock': return admin || [STATUS.DRAFT, STATUS.AWAITING].includes(sample.Status);
-    case 'startAnalysis': return lab && sample.Status === STATUS.AWAITING;
-    case 'resumeAnalysis': return lab && sample.Status === STATUS.IN_PROGRESS;
-    case 'completeAnalysis': return lab && sample.Status === STATUS.IN_PROGRESS;
-    case 'editLeaves': return admin || (lab && [STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status)) || correctable;
-    case 'addLeaves': return lab && [STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status);
-    case 'cancelSample': return (admin && [STATUS.DRAFT, STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status)) ||
-      (own && [STATUS.DRAFT, STATUS.AWAITING].includes(sample.Status));
-    case 'reopen': return sample.Status === STATUS.COMPLETE && (admin || correctable);
+    case 'startAnalysis': return user && sample.Status === STATUS.AWAITING;
+    case 'resumeAnalysis': return user && sample.Status === STATUS.IN_PROGRESS;
+    case 'completeAnalysis': return user && sample.Status === STATUS.IN_PROGRESS;
+    case 'editLeaves': return admin || (user && [STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status)) ||
+      (sample.Status === STATUS.COMPLETE && correctable);
+    case 'addLeaves': return user && [STATUS.AWAITING, STATUS.IN_PROGRESS].includes(sample.Status);
+    case 'cancelSample': return (admin && working) || (own && [STATUS.DRAFT, STATUS.AWAITING].includes(sample.Status));
+    case 'reopen': return sample.Status === STATUS.COMPLETE && correctable;
     case 'restore': return admin && sample.Status === STATUS.CANCELLED;
-    case 'analyse': return lab;
-    case 'export': return lab;
+    case 'analyse': return user;
+    case 'viewAllCompleted': return admin;
+    case 'reports': return admin;
+    case 'export': return admin;
     case 'admin': return admin;
+    case 'owner': return owner;
     default: return false;
   }
 }
@@ -361,7 +427,7 @@ export const SECTIONS = Object.freeze(['Mites', 'Plant Health']);
 /** Sections a user can use. Blank/missing = all; administrators always have all. */
 export function userSections(user) {
   if (!user) return [];
-  if (user.Role === 'Administrator') return [...SECTIONS];
+  if (isAdminRole(user.Role)) return [...SECTIONS];
   const raw = Array.isArray(user.Sections) ? user.Sections : String(user.Sections || '').split(',');
   const valid = raw.map((x) => String(x).trim()).filter((x) => SECTIONS.includes(x));
   return valid.length ? valid : [...SECTIONS];
@@ -401,8 +467,11 @@ export const BLOCK_OVERVIEW = Object.freeze([
 
 export const MAX_BINES_PER_BAY = 42; // 7 plants × 2 strings × 3 bines
 
-/** The farm's 7-step leaf colour chart (1 = yellow-green … 7 = darkest green). */
-export const LEAF_COLOURS = Object.freeze(['#b3c600', '#77891b', '#677c1d', '#517720', '#3a6023', '#2e542d', '#1f4126']);
+/**
+ * The farm's 7-step leaf colour chart (1 = light yellow-green … 7 = mid green).
+ * Nov 2026: 1 made lighter and the old 5 (#3a6023) became 7; evenly spaced in between.
+ */
+export const LEAF_COLOURS = Object.freeze(['#d0e263', '#b9cc26', '#a1b40f', '#8a9d18', '#73861c', '#4f7520', '#3a6023']);
 
 /** Short names of growth stages for charts and lists. */
 export const STAGE_SHORT = Object.freeze(['Emergence', 'Training', 'Vegetative', 'Laterals', 'Burr / cone initiation', 'Cone development', 'Harvest ready']);
@@ -427,7 +496,7 @@ export function plantQuestions(check) {
 }
 
 const NUMBER_RULES = Object.freeze([
-  { key: 'BinesTrained', label: 'Bines trained', min: 0, max: MAX_BINES_PER_BAY, whole: true },
+  { key: 'BinesTrained', label: 'Bines on string', min: 0, max: MAX_BINES_PER_BAY, whole: true },
   { key: 'AvgBineHeightCm', label: 'Average bine height', min: 0, max: 1000 },
   { key: 'MaxBineHeightCm', label: 'Maximum bine height', min: 0, max: 1000 },
   { key: 'InternodeUnder1mCm', label: 'Internode spacing <1 m', min: 0, max: 100 },
@@ -473,7 +542,7 @@ export const PLANT_EXPORT_HEADERS = [
   'RecordNumber', 'Season', 'InspectionDate', 'WeekStarting', 'InspectionTime', 'Inspector',
   'Block', 'Variety', 'Row', 'Bay',
   'BineHealth', 'CoirStatus', 'WeedPressure', 'GrassLength', 'TrellisIntegrity', 'IrrigationLeaks',
-  'GrowthStage', 'BinesTrained', 'AvgBineHeightCm', 'MaxBineHeightCm',
+  'GrowthStage', 'BinesOnString', 'AvgBineHeightCm', 'MaxBineHeightCm',
   'InternodeUnder1mCm', 'Internode1to2mCm', 'Internode2to3mCm', 'AvgLateralLengthCm',
   'SnappedTipsBine', 'SnappedTipsLateral', 'OverallBineHealth', 'LeafColour', 'LeafSize', 'LeafDamage',
   'Comments', 'OverviewPhoto', 'LeafPhoto1', 'LeafPhoto2', 'CheckID',
@@ -489,6 +558,7 @@ export function plantExportRows(checks, nameOf = (e) => e) {
       if (h === 'WeekStarting') return weekStarting(c.InspectionDate);
       if (h === 'Season') return c.Season || seasonOf(c.InspectionDate);
       if (h === 'Inspector') return nameOf(c.InspectorEmail);
+      if (h === 'BinesOnString') return c.BinesTrained ?? ''; // stored in the BinesTrained column
       if (/Photo/.test(h)) return photoRef(c[h]);
       return c[h] ?? '';
     }));
@@ -522,7 +592,7 @@ export function stageTimeline(checks, season = '') {
 /** Can this user change this plant check? Own checks for 31 days; administrators always. */
 export function canEditPlantCheck(user, check, now = Date.now()) {
   if (!user) return false;
-  if (user.Role === 'Administrator') return true;
+  if (isAdminRole(user.Role)) return true;
   if (!hasSection(user, 'Plant Health')) return false;
   if (String(check.InspectorEmail || '').toLowerCase() !== String(user.UserEmail || '').toLowerCase()) return false;
   const t = new Date(check.CreatedAt || NaN).getTime();

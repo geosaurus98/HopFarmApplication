@@ -1,12 +1,12 @@
 // Service worker: keeps the app itself available offline.
 // Data lives in IndexedDB; API calls (to script.google.com) are never cached here.
 // Bump CACHE when any app file changes so tablets pick up the new version.
-const CACHE = 'hopfarm-v1.3.0';
+const CACHE = 'hopfarm-v1.4.0';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'help/mite-control-poster.webp',
-  'js/app.js', 'js/db.js', 'js/logic.js', 'js/sync.js', 'js/ui.js', 'js/config.js', 'js/plant.js',
-  // Plant health reference pictures (available offline in the field)
+  'js/app.js', 'js/db.js', 'js/logic.js', 'js/sync.js', 'js/ui.js', 'js/config.js', 'js/plant.js', 'js/help.js',
+  // Help pictures (available offline in the field)
   'help/plant/boron.jpg',
   'help/plant/calcium.jpg',
   'help/plant/chlorine.jpg',
@@ -16,13 +16,19 @@ const FILES = [
   'help/plant/magnesium.jpg',
   'help/plant/manganese.jpg',
   'help/plant/molybdenum.jpg',
-  'help/plant/nitrogen-1.jpg',
   'help/plant/nitrogen.jpg',
   'help/plant/phosphorus.jpg',
-  'help/plant/potassium-1.jpg',
   'help/plant/potassium.jpg',
   'help/plant/sulphur.jpg',
   'help/plant/zinc.jpg',
+  'help/mites/lacewing.jpg',
+  'help/mites/ladybird.jpg',
+  'help/mites/leaf-damage.jpg',
+  'help/mites/pp-eating-2sm.jpg',
+  'help/mites/pp-with-2sm.jpg',
+  'help/mites/predatory-thrips.jpg',
+  'help/mites/two-spotted-mite.jpg',
+  'help/mites/two-spotted-mites.jpg',
 ];
 
 self.addEventListener('install', (e) => {

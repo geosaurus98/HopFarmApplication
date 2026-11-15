@@ -25,7 +25,7 @@ you can.
    you wrote it yourself: click *Advanced → Go to …*.
 5. Back in the sheet you will see the tabs **Users, BlockVarieties, Samples,
    LeafAnalysis, AuditLog, HelpReference**, and a pop-up with **your access code**.
-   You are already set up as the Administrator. Your username is the part of
+   You are already set up as the Owner. Your username is the part of
    your email before the @; change it and your FullName in the Users tab if
    you like.
 
@@ -57,28 +57,35 @@ sheet**. Each row is one block and variety:
 - If an area changes later, edit `AreaHa`. Samples already collected keep the
   area and leaf target they were collected with.
 
-**Users**: one row per person. After this first setup, administrators can add
-and change people from inside the app (**Manage Users** on the home screen),
-so you rarely need to edit this tab by hand. Administrators can view other
-administrators (including their access codes) but not change them; only the
-spreadsheet owner can, by editing this tab.
+**Users**: one row per person. After this first setup, owners add and change
+people from inside the app (**Manage Users** on the home screen), and workers
+can add themselves on a set-up tablet. You rarely need to edit this tab by hand.
 
-| UserEmail | Username | FullName | Role | Active | AccessCode |
-|---|---|---|---|---|---|
-| sam@nelsonlakeshops.co.nz | sam | Sam Wilson | Collector | TRUE | 482913 |
+| UserEmail | Username | FullName | Role | Sections | Active | AccessCode |
+|---|---|---|---|---|---|---|
+| sam@nelsonlakeshops.co.nz | sam | Sam Wilson | User | | TRUE | |
 
-- `UserEmail`: the person's email. Used for contact, and behind the scenes to
-  link their samples. Don't change it once they have recorded data.
-- `Username`: what they type to sign in, e.g. `sam`. Must be different for each
-  person; capitals don't matter. Their email address also works for signing in.
-- `FullName`: their real name, shown in the app and in exports.
-- `Role` is **Collector** (field samples only), **Analyst** (leaf analysis and
-  exports) or **Administrator** (everything, including corrections to completed
-  samples).
-- `AccessCode` is the code that person types to sign in. Make each one different;
-  six random digits is fine. Only people who can open this spreadsheet can see
-  the codes.
-- To remove someone's access, set `Active` to `FALSE` or change their code.
+- `UserEmail`: identifies the person behind the scenes and links their records.
+  Don't change it once they've recorded data. People who add themselves on a
+  tablet without an email get an ID like `sam.wilson@workers.hopfarm`.
+- `Username`: for signing in with a code; must be unique.
+- `FullName`: their real name, shown in the app, the name list and exports.
+- `Role`: the person's level:
+  - **User**: collects and analyses samples and does plant checks. Reopens their
+    own analyses for 31 days. Taps their name on a set-up tablet; no code needed.
+  - **Admin**: everything a User does, plus all completed samples, all samples,
+    reports, exports and correcting any sample. Signs in with a code.
+  - **Owner**: everything an Admin does, plus people, access codes and tablets.
+    Signs in with a code. Other owners are view-only in the app.
+
+  Older names are upgraded automatically: Collector and Analyst become User,
+  Administrator becomes Owner.
+- `Sections`: `Mites`, `Plant Health`, or both. Blank means both.
+- `AccessCode`: needed for Admins and Owners; optional for Users.
+- To remove someone's access, set `Active` to `FALSE`.
+
+**Devices**: the tablets an admin or owner has set up so workers can tap their
+name. Owners can remove a tablet in **Manage Users → Tablets**.
 
 **HelpReference**: starter identification and how-to text is already filled in.
 Edit it to match the farm's own posters. The "Mite control in hops" poster is
@@ -176,27 +183,38 @@ Optional: put the server address from step 3 into
 [`app/js/config.js`](../app/js/config.js) (`DEFAULT_API_URL`) before uploading,
 so staff don't have to type it.
 
-## 5. Install on each tablet (2 min per device)
+## 5. Set up each tablet (2 min per tablet)
 
 1. On the tablet, open the app address in **Chrome** (Android) or **Safari** (iPad).
-2. Sign in with the person's username and access code. Under **Server address**,
-   paste the `/exec` address if it isn't pre-filled.
+2. An **admin or owner** signs in with their username and access code. Leave
+   **Set up this tablet so workers can just tap their name** ticked and give the
+   tablet a name, e.g. *Field tablet 1*.
 3. Install it:
    - Android Chrome: **⋮ → Add to Home screen / Install app**.
    - iPad Safari: **Share → Add to Home Screen**.
-4. Open it from the home-screen icon once while on Wi-Fi and wait for **All synced**.
-   From then on it opens and works with no signal.
+4. Open it from the home-screen icon once while on Wi-Fi and wait for
+   **All synced**. From then on it works with no signal.
+5. Tap **Change person** (top right). The tablet now shows **Who's using the
+   app?**:
+   - workers tap their name, with no password;
+   - someone new taps **I'm new here** and enters their name (this needs Wi-Fi);
+   - admins and owners use **Sign in with your access code** underneath.
+
+Each record saves who did it, so several people can share one tablet and their
+work uploads under their own names. If a tablet is lost, an owner removes it in
+**Manage Users → Tablets**.
 
 ## 6. Day-to-day use
 
 | Who | Routine |
 |---|---|
-| Field collector | Open the app on Wi-Fi before going out (it syncs). Record each bag with **New Mite Sample**. Back in range, changes upload by themselves; the badge at the top shows anything still waiting. |
-| Analyst | **Analyse Samples → choose the bag → Start analysis**. Enter the five counts and press **Save & next leaf** (or Enter on the last box). **Save & stop** pauses; **Resume at leaf N** continues. Finish with **Complete analysis**. |
-| Administrator | **Manage Users** in the app: add people, change roles, issue a new access code, or untick *Can sign in* when someone leaves. Maintain blocks in the sheet. Correct completed samples in the app (every change is logged in **AuditLog**). Run **Hop Farm → Run data quality report** from time to time. |
+| Collecting (any User) | Open the app on Wi-Fi before going out and check it says **All synced**. Tap your name, then **Mite Monitoring → New Mite Sample**: enter the bag number, choose the block and tap **Continue**. Collect the leaves shown, seal the bag and check it's clearly labelled. Back in range, everything uploads by itself. |
+| Analysing (any User) | **Mite Monitoring → Analyse Samples → choose the bag → Start analysis**. Every count starts at 0, so change only what you see, then tap **Next leaf**. Tap **? Help** for identification photos. When the bag is done tap **Sample finished**, then **Complete analysis**; finishing early needs a reason. You can reopen your own analyses for 31 days. |
+| Admin | Everything above, plus **Completed Samples** (all), **All Samples**, **Mite Reports** / **Plant Reports** and exports. Correct any sample; every change to a completed one is logged in **AuditLog**. Run **Hop Farm → Run data quality report** from time to time. |
+| Owner | Everything above, plus **Manage Users**: add people, set their level and sections, give admins and owners codes, and remove tablets. |
 
-**Don't** sign out, clear browser data or uninstall the app while the badge
-shows changes waiting to upload.
+**Don't** clear the browser data or uninstall the app while the badge shows
+changes waiting to upload.
 
 ## 7. Getting the data into Excel and seeing trends
 

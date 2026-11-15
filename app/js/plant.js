@@ -12,6 +12,7 @@ let ctx; // shared helpers from app.js: { main, go, render, session, userNames, 
 export function initPlant(context) { ctx = context; }
 
 export const plantRoutes = [
+  [/^#\/plant-health$/, viewPlantHome],
   [/^#\/plant\/new$/, () => viewPlantForm(null)],
   [/^#\/plant\/edit\/([\w-]+)$/, (id) => viewPlantForm(id)],
   [/^#\/plant\/([\w-]+)$/, viewPlantCheck],
@@ -20,6 +21,7 @@ export const plantRoutes = [
 ];
 
 const me = () => ctx.session().user;
+const isAdmin = () => L.isAdminRole(me().Role);
 const nowIso = () => new Date().toISOString();
 const timeNow = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 const live = (checks) => checks.filter((c) => !L.toBoolean(c.Deleted));
@@ -40,6 +42,25 @@ function previousFor(checks, blockId, beforeDate, excludeId) {
   return live(checks)
     .filter((c) => c.BlockVarietyID === blockId && c.CheckID !== excludeId && (!beforeDate || c.InspectionDate <= beforeDate))
     .sort((a, b) => String(b.InspectionDate).localeCompare(String(a.InspectionDate)) || String(b.CreatedAt).localeCompare(String(a.CreatedAt)))[0];
+}
+
+// ---------------------------------------------------------------------------
+// Plant Health page
+// ---------------------------------------------------------------------------
+async function viewPlantHome() {
+  if (guard()) return;
+  const checks = live(await db.getAll('plantChecks'));
+  const mineThisWeek = checks.filter((c) => String(c.InspectorEmail).toLowerCase() === me().UserEmail.toLowerCase() &&
+    c.InspectionDate >= L.todayLocal(new Date(Date.now() - 7 * 86400000))).length;
+  const tile = (href, title, sub, badge, cls = '') => h('a', { class: `tile ${cls}`, href },
+    h('span', { class: 'tile-title' }, title), h('span', { class: 'tile-sub' }, sub),
+    badge !== null && badge !== undefined ? h('span', { class: 'tile-badge' }, String(badge)) : null);
+  mount(ctx.main(),
+    h('div', { class: 'page-head' }, h('h1', {}, 'Plant Health'), h('a', { class: 'btn secondary small', href: '#/help/plant' }, 'Help')),
+    h('div', { class: 'tiles two' },
+      tile('#/plant/new', 'New Plant Check', 'Weekly check of a bay (7 plants)', null, 'primary'),
+      tile('#/plants', isAdmin() ? 'Plant Checks' : 'My Plant Checks', 'This week', mineThisWeek)),
+    isAdmin() ? h('div', { class: 'tiles two' }, tile('#/plant-reports', 'Plant Reports', 'Growth, stages and CSV for Excel')) : null);
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +99,7 @@ function colourPicker(value) {
   let selected = value === '' || value === undefined || value === null ? '' : Number(value);
   const wrap = h('div', { class: 'swatches', id: 'LeafColour', role: 'radiogroup', 'aria-label': 'Approximate leaf colour' });
   const buttons = L.LEAF_COLOURS.map((hex, i) => h('button', {
-    type: 'button', class: `swatch${i === 0 ? ' light' : ''}`, style: { background: hex }, 'data-value': i + 1,
+    type: 'button', class: `swatch${i < 3 ? ' light' : ''}`, style: { background: hex }, 'data-value': i + 1,
     role: 'radio', 'aria-label': `Colour ${i + 1}`,
     onclick: () => { selected = selected === i + 1 ? '' : i + 1; paint(); },
   }, String(i + 1)));
@@ -92,7 +113,7 @@ function colourPicker(value) {
   wrap.append(...buttons);
   paint();
   wrap.getValue = () => selected;
-  return h('div', {}, wrap, h('div', { class: 'hint' }, '1 = yellow-green … 7 = darkest green. Tap the closest colour.'));
+  return h('div', {}, wrap, h('div', { class: 'hint' }, '1 = light yellow-green … 7 = mid green. Tap the closest colour.'));
 }
 
 function numberInput(id, value, { unit, max, step = 'any', whole = false } = {}) {
@@ -274,7 +295,7 @@ async function viewPlantForm(id) {
     section('3. Current stage of plants', null, fieldBox('GrowthStage', 'Growth stage', stage)),
     section('4. Vine evaluation', 'Look at and evaluate all 7 plants in the bay.',
       h('div', { class: 'grid-3' },
-        fieldBox('BinesTrained', 'Number of bines trained', bines.el, { hint: '7 plants × 2 strings × 3 bines = 42' }),
+        fieldBox('BinesTrained', 'Number of bines on string', bines.el, { hint: '7 plants × 2 strings × 3 bines = 42' }),
         fieldBox('AvgBineHeightCm', 'Average bine height', avgH.el, { hint: 'Ground to growing tip, average of the 7 plants' }),
         fieldBox('MaxBineHeightCm', 'Maximum bine height', maxH.el, { hint: 'Tallest bine' }),
         fieldBox('InternodeUnder1mCm', 'Internode spacing <1 m', in1.el, { hint: 'Spacing between leaves in the first metre' }),
@@ -325,7 +346,8 @@ const listFilter = { block: '', season: '', mine: false };
 async function viewPlantList() {
   if (guard()) return;
   const nameOf = await ctx.userNames();
-  const checks = live(await db.getAll('plantChecks'));
+  const mineOnly = (c) => String(c.InspectorEmail).toLowerCase() === me().UserEmail.toLowerCase();
+  const checks = live(await db.getAll('plantChecks')).filter((c) => isAdmin() || mineOnly(c));
   const pending = new Set((await db.getAll('outbox')).map((o) => o.id));
   const seasons = [...new Set(checks.map((c) => c.Season || L.seasonOf(c.InspectionDate)))].sort().reverse();
   const blocks = [...new Set(checks.map((c) => `${c.Block} - ${c.Variety}`))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -350,10 +372,10 @@ async function viewPlantList() {
   const sel = (key, label, options) => h('select', { 'aria-label': label, onchange: (e) => { listFilter[key] = e.target.value; refresh(); } },
     h('option', { value: '' }, label), options.map((o) => h('option', { value: o, selected: listFilter[key] === o }, o)));
   mount(ctx.main(),
-    h('div', { class: 'page-head' }, h('h1', {}, 'Plant Checks'), h('a', { class: 'btn primary', href: '#/plant/new' }, '+ New plant check')),
+    h('div', { class: 'page-head' }, h('h1', {}, isAdmin() ? 'Plant Checks' : 'My Plant Checks'), h('a', { class: 'btn primary', href: '#/plant/new' }, '+ New plant check')),
     h('div', { class: 'filters' },
       sel('block', 'All blocks', blocks), sel('season', 'All seasons', seasons),
-      h('label', { class: 'check-row' }, h('input', { type: 'checkbox', class: 'checkbox', checked: listFilter.mine, onchange: (e) => { listFilter.mine = e.target.checked; refresh(); } }), h('span', {}, 'Only mine'))),
+      isAdmin() ? h('label', { class: 'check-row' }, h('input', { type: 'checkbox', class: 'checkbox', checked: listFilter.mine, onchange: (e) => { listFilter.mine = e.target.checked; refresh(); } }), h('span', {}, 'Only mine')) : null),
     countEl, listEl);
   refresh();
 }
@@ -373,7 +395,7 @@ async function viewPlantCheck(id) {
     h('div', { class: 'grid-2' },
       h('section', { class: 'card' }, h('h2', {}, 'Stage and vines'),
         info('Growth stage', c.GrowthStage),
-        info('Bines trained', c.BinesTrained, ` / ${L.MAX_BINES_PER_BAY}`),
+        info('Bines on string', c.BinesTrained, ` / ${L.MAX_BINES_PER_BAY}`),
         info('Average bine height', c.AvgBineHeightCm, ' cm'),
         info('Maximum bine height', c.MaxBineHeightCm, ' cm'),
         info('Internode <1 m', c.InternodeUnder1mCm, ' cm'),
@@ -398,7 +420,7 @@ async function viewPlantCheck(id) {
 const PLANT_MEASURES = [
   { key: 'AvgBineHeightCm', label: 'Average bine height (cm)', short: 'cm average height' },
   { key: 'MaxBineHeightCm', label: 'Maximum bine height (cm)', short: 'cm tallest' },
-  { key: 'BinesTrained', label: `Bines trained (of ${L.MAX_BINES_PER_BAY})`, short: 'bines trained' },
+  { key: 'BinesTrained', label: `Bines on string (of ${L.MAX_BINES_PER_BAY})`, short: 'bines on string' },
   { key: 'InternodeUnder1mCm', label: 'Internode spacing <1 m (cm)', short: 'cm internode' },
   { key: 'AvgLateralLengthCm', label: 'Average lateral length (cm)', short: 'cm laterals' },
   { key: 'LeafColour', label: 'Leaf colour (1–7)', short: 'leaf colour' },
@@ -406,6 +428,7 @@ const PLANT_MEASURES = [
 
 async function viewPlantReports() {
   if (guard()) return;
+  if (!isAdmin()) { toast('Reports are for admins and owners.', 'bad'); return ctx.go('#/plant-health'); }
   const nameOf = await ctx.userNames();
   const checks = live(await db.getAll('plantChecks'));
   const seasons = [...new Set(checks.map((c) => c.Season || L.seasonOf(c.InspectionDate)))].filter(Boolean).sort().reverse();

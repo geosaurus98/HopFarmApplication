@@ -291,3 +291,41 @@ table.timeline td:first-child, table.timeline th:first-child { text-align: left;
 /* ---------- Live / test ---------- */
 .env-banner { background: #f3b229; color: #2b1d00; font-weight: 700; text-align: center; padding: .45rem 1rem; font-size: .9rem; }
 .env-banner.danger { background: var(--red); color: #fff; }
+
+/* ---------- Sign-in: who's using the app ---------- */
+.card.narrow.wide { max-width: 760px; }
+.who-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .6rem; margin: 1rem 0; }
+.who-btn { min-height: 64px; border-radius: 12px; border: 2px solid var(--green); background: #fff; color: var(--green-dark); font: inherit; font-size: 1.15rem; font-weight: 700; cursor: pointer; padding: .5rem 1rem; }
+.who-btn:active { background: var(--green-light); }
+.switch-person { color: #fff; font-size: .85rem; text-decoration: underline; min-height: 44px; display: inline-flex; align-items: center; }
+@media (max-width: 560px) { .app-header .who { display: none; } }
+
+/* ---------- Home and section pages ---------- */
+.tiles.two { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 1rem; }
+@media (max-width: 560px) { .tiles.two { grid-template-columns: 1fr; } }
+.tile.section-tile { min-height: 180px; color: #fff; border: none; }
+.tile.section-tile .tile-title { font-size: 1.6rem; }
+.tile.section-tile.mites { background: linear-gradient(135deg, #2f5d34, #3f7a45); }
+.tile.section-tile.plants { background: linear-gradient(135deg, #5a7d1d, #7a9a2a); }
+/* ---------- Help ---------- */
+.help-text { white-space: pre-line; }
+.help-steps { margin: .25rem 0 .75rem; padding-left: 1.4rem; }
+.help-steps li { margin: .35rem 0; }
+.help-photos { display: grid; gap: .75rem; margin: .5rem 0 1rem; }
+.help-photo { display: block; width: 100%; max-width: 760px; border-radius: 10px; border: 1px solid var(--line); }
+.help-item summary { font-size: 1.05rem; }
+
+/* ---------- Leaf screen (Nov 2026 layout) ---------- */
+.count-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem 1.25rem; }
+.count-grid.beneficials { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .4rem 1rem; }
+.counter.small label strong { font-size: .95rem; }
+.count-input.small { min-height: 48px; font-size: 1.25rem; }
+.counter.small .counter-row { grid-template-columns: 48px 1fr 48px; }
+.counter.small .btn.step { min-height: 48px; font-size: 1.5rem; }
+.beneficial-head { margin: 1.1rem 0 .3rem; font-size: 1.05rem; display: flex; gap: .75rem; align-items: baseline; }
+.beneficial-head span { font-size: .9rem; font-weight: 600; }
+.wide-dialog { max-width: 860px; width: calc(100% - 1.5rem); max-height: 90vh; }
+.wide-dialog .card { border: none; padding: .5rem 0; }
+@media (max-width: 560px) { .count-grid { grid-template-columns: 1fr; } }
+
+.collect-steps { text-align: left; max-width: 520px; margin: 1rem auto; font-size: 1.2rem; line-height: 1.6; }

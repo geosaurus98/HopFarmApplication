@@ -28,7 +28,7 @@ test('setup creates every tab with headers, is idempotent, seeds an admin with a
   for (const [t, headers] of Object.entries(g.gs.SCHEMA)) assert.deepEqual(g.sheets[t].data[0], headers, t);
   const users = g.table('Users');
   assert.equal(users.length, 1);
-  assert.equal(users[0].Role, 'Administrator');
+  assert.equal(users[0].Role, 'Owner');
   assert.match(users[0].AccessCode, /^\d{6}$/);
   assert.equal(g.table('BlockVarieties').length, 39);
   assert.ok(g.table('HelpReference').length >= 10);
@@ -91,10 +91,10 @@ test('login by username or email, checks code and active flag; never returns acc
   const g = createSeededGas();
   const byName = g.post({ action: 'login', login: ' Lee ', code: '333333' });
   assert.equal(byName.ok, true);
-  assert.deepEqual(byName.user, { UserEmail: 'lab@farm.nz', Username: 'lee', FullName: 'Lee Analyst', Role: 'Analyst', Sections: ['Mites', 'Plant Health'], Active: true });
+  assert.deepEqual(byName.user, { UserEmail: 'lab@farm.nz', Username: 'lee', FullName: 'Lee Analyst', Role: 'User', Sections: ['Mites', 'Plant Health'], Active: true });
   const ok = g.post({ action: 'login', login: 'LAB@farm.nz ', code: '333333' });
   assert.equal(ok.ok, true);
-  assert.equal(ok.user.Role, 'Analyst');
+  assert.equal(ok.user.Role, 'User');
   // Older app versions send `email`.
   assert.equal(g.post({ action: 'login', email: 'lab@farm.nz', code: '333333' }).ok, true);
   assert.match(g.post({ action: 'login', login: 'lee', code: '111111' }).error, /Username or access code not recognised/);
@@ -175,21 +175,40 @@ test('inactive blocks cannot be used for new samples', () => {
   assert.match(res.results[0].error, /no longer active/);
 });
 
-test('roles: collectors cannot record leaves, edit others\' samples or complete analyses', () => {
+test('levels: Users collect and analyse; reports, exports and people are for admins and owners', () => {
   const g = createSeededGas();
+  const BEA = { login: 'bea', code: '555000' }; // Admin
   push(g, LAB, [newSample('sample-lab1', { CollectorEmail: 'lab@farm.nz' })]);
   let r = push(g, COL, [newSample('sample-0001', { CollectorEmail: 'someone@else.nz' })]);
   assert.match(r.results[0].error, /own name/);
-  r = push(g, COL, [{ table: 'Samples', id: 'sample-lab1', patch: { SampleComments: 'x' } }]);
-  assert.match(r.results[0].error, /own samples/);
+  // Any User can analyse any sample.
   push(g, COL, [newSample('sample-0002')]);
-  r = push(g, COL, [newLeaf('leaf-00001', 'sample-0002', 1)]);
-  assert.match(r.results[0].error, /Only analysts/);
-  r = push(g, COL, [{ table: 'Samples', id: 'sample-0002', patch: { Status: 'Analysis Complete' } }]);
-  assert.match(r.results[0].error, /not allowed/);
-  r = push(g, COL, [{ table: 'Samples', id: 'sample-0002', patch: { Status: 'Cancelled' } }]);
+  r = push(g, LAB, [newLeaf('leaf-00001', 'sample-0002', 1), { table: 'Samples', id: 'sample-0002', patch: { Status: 'Analysis In Progress', AnalysisStartedBy: 'lab@farm.nz' } }]);
+  assert.ok(r.results.every((x) => x.ok), JSON.stringify(r.results));
+  // Only the collector (or an admin) cancels a sample.
+  r = push(g, LAB, [{ table: 'Samples', id: 'sample-lab1', patch: { Status: 'Cancelled' } }]);
   assert.equal(r.results[0].ok, true);
-  assert.equal(g.post({ action: 'export', ...COL, type: 'leaves' }).ok, false);
+  push(g, COL, [newSample('sample-0003', { SampleNumber: 9 })]);
+  r = push(g, LAB, [{ table: 'Samples', id: 'sample-0003', patch: { Status: 'Cancelled' } }]);
+  assert.match(r.results[0].error, /not allowed/);
+  // Reports/exports: admins and owners only.
+  assert.match(g.post({ action: 'export', ...COL, type: 'leaves' }).error, /Admins and owners only/);
+  assert.equal(g.post({ action: 'export', ...BEA, type: 'leaves' }).ok, true);
+  assert.equal(g.post({ action: 'export', ...ADMIN, type: 'summary' }).ok, true);
+  // People: owners only.
+  assert.match(g.post({ action: 'listUsers', ...BEA }).error, /Owners only/);
+  assert.equal(g.post({ action: 'listUsers', ...ADMIN }).ok, true);
+});
+
+test('old role names are upgraded: Collector/Analyst → User, Administrator → Owner', () => {
+  const g = createGas();
+  const sh = g.ss.insertSheet('Users');
+  sh.getRange(1, 1, 4, 5).setValues([
+    ['UserEmail', 'Username', 'Role', 'Active', 'AccessCode'],
+    ['a@x.nz', 'a', 'Collector', true, '1111'], ['b@x.nz', 'b', 'Analyst', true, '2222'], ['c@x.nz', 'c', 'Administrator', true, '3333']]);
+  assert.equal(g.post({ action: 'login', login: 'c', code: '3333' }).user.Role, 'Owner', 'works even before repair');
+  g.gs.setupHopFarmWorkbook();
+  assert.deepEqual(g.table('Users').map((u) => u.Role), ['User', 'User', 'Owner']);
 });
 
 test('full analysis workflow, completion below target, export one row per leaf', () => {
@@ -225,7 +244,7 @@ test('full analysis workflow, completion below target, export one row per leaf',
   const doneCol = g.sheets.Samples.data[0].indexOf('AnalysisCompletedAt');
   g.sheets.Samples.data[1][doneCol] = new Date(Date.now() - 32 * 86400000);
   r = push(g, LAB, [{ table: 'LeafAnalysis', id: 'leaf-00001', patch: { TetranychusCount: 9 } }]);
-  assert.match(r.results[0].error, /more than 31 days ago/);
+  assert.match(r.results[0].error, /analysed this sample \(within 31 days\) or an admin/);
   r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis In Progress' } }]);
   assert.match(r.results[0].error, /more than 31 days ago/);
   r = push(g, ADMIN, [{ table: 'LeafAnalysis', id: 'leaf-00001', patch: { TetranychusCount: 9 } }]);
@@ -242,7 +261,7 @@ test('full analysis workflow, completion below target, export one row per leaf',
   r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis Complete', ActualLeafCount: 3 } }]);
   assert.equal(r.results[0].ok, true, r.results[0].error);
 
-  const exp = g.post({ action: 'export', ...LAB, type: 'leaves' });
+  const exp = g.post({ action: 'export', ...ADMIN, type: 'leaves' });
   const lines = exp.csv.trim().split('\r\n');
   assert.equal(lines.length, 4);
   assert.equal(lines[0], g.gs.LEAF_EXPORT_HEADERS.join(','));
@@ -251,14 +270,14 @@ test('full analysis workflow, completion below target, export one row per leaf',
   assert.match(lines[1], /,Lee Analyst,2026-11-04 14:00:00,/);
   assert.match(exp.filename, /^hopfarm_leaf_results_all-seasons_\d{4}-\d{2}-\d{2}\.csv$/);
 
-  const sum = g.post({ action: 'export', ...LAB, type: 'summary', season: '2026/27' });
+  const sum = g.post({ action: 'export', ...ADMIN, type: 'summary', season: '2026/27' });
   const [hdr, row] = sum.csv.trim().split('\r\n').map((l) => l.split(','));
   const rec = Object.fromEntries(hdr.map((h, i) => [h, row[i]]));
   assert.equal(rec.LeavesAnalysed, '3');
   assert.equal(rec.BelowTarget, 'YES');
   assert.equal(rec.TotalTwoSM, '14'); // 9 + 2 + 3
   assert.equal(rec.EarlyCompletionReason, 'Damaged leaves');
-  assert.equal(g.post({ action: 'export', ...LAB, type: 'summary', season: '1999/00' }).rows, 0);
+  assert.equal(g.post({ action: 'export', ...ADMIN, type: 'summary', season: '1999/00' }).rows, 0);
 });
 
 test('deleted leaves disappear from exports and are sent to devices as deletions', () => {
@@ -268,7 +287,7 @@ test('deleted leaves disappear from exports and are sent to devices as deletions
   push(g, LAB, [{ table: 'LeafAnalysis', id: 'leaf-00002', patch: { Deleted: true } }]);
   const after = g.post({ action: 'pull', ...LAB, since: before.serverTime });
   assert.ok(after.leaves.some((l) => l.LeafAnalysisID === 'leaf-00002' && l.Deleted === true));
-  assert.equal(g.post({ action: 'export', ...LAB, type: 'leaves' }).rows, 1);
+  assert.equal(g.post({ action: 'export', ...ADMIN, type: 'leaves' }).rows, 1);
 });
 
 test('patches only touch the fields sent, so concurrent edits do not overwrite each other', () => {
@@ -343,62 +362,62 @@ test('data quality report and spreadsheet menu exports', () => {
   assert.equal(g.table('Export_SampleSummary').length, 2);
 });
 
-test('admins add and edit users; rules are enforced and changes audited', () => {
+test('owners add and edit people; codes optional for Users, required for Admins/Owners; audited', () => {
   const g = createSeededGas();
   const save = (who, user, isNew = false) => g.post({ action: 'saveUser', ...who, isNew, user });
-  const add = save(ADMIN, { UserEmail: ' Sam@Farm.nz ', Username: 'Sam', FullName: 'Sam Wilson', Role: 'Collector' }, true);
+  const add = save(ADMIN, { UserEmail: ' Sam@Farm.nz ', Username: 'Sam', FullName: 'Sam Wilson', Role: 'User' }, true);
   assert.equal(add.ok, true, add.error);
   assert.equal(add.user.UserEmail, 'sam@farm.nz');
   assert.equal(add.user.Username, 'sam');
-  assert.match(add.user.AccessCode, /^[1-9]\d{5}$/); // generated
-  const signIn = g.post({ action: 'login', login: 'sam', code: add.user.AccessCode });
-  assert.equal(signIn.user.FullName, 'Sam Wilson');
-  assert.equal(signIn.user.Role, 'Collector');
+  assert.equal(add.user.AccessCode, '', 'Users pick their name: no code needed');
+  assert.equal(g.post({ action: 'login', login: 'sam', code: '000000' }).ok, false);
 
   // Validation
-  assert.match(save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam2', FullName: 'X', Role: 'Collector' }, true).error, /already exists/);
-  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'lee', FullName: 'X', Role: 'Collector' }, true).error, /already taken/);
-  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'has space', FullName: 'X', Role: 'Collector' }, true).error, /Username/);
-  assert.match(save(ADMIN, { UserEmail: 'not-an-email', Username: 'abc', FullName: 'X', Role: 'Collector' }, true).error, /valid email/);
-  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'abc', FullName: '', Role: 'Collector' }, true).error, /full name/);
-  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'abc', FullName: 'X', Role: 'Boss' }, true).error, /role/);
-  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'abc', FullName: 'X', Role: 'Collector', AccessCode: '0123' }, true).error, /Access code/);
-  assert.match(save(ADMIN, { UserEmail: 'ghost@farm.nz', Username: 'ghost', FullName: 'X', Role: 'Collector' }).error, /not found/);
+  assert.match(save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam2', FullName: 'X', Role: 'User' }, true).error, /already exists/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'lee', FullName: 'X', Role: 'User' }, true).error, /already taken/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'has space', FullName: 'X', Role: 'User' }, true).error, /Username/);
+  assert.match(save(ADMIN, { UserEmail: 'not-an-email', Username: 'abc', FullName: 'X', Role: 'User' }, true).error, /valid email/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'abc', FullName: '', Role: 'User' }, true).error, /full name/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'abc', FullName: 'X', Role: 'Boss' }, true).error, /level/);
+  assert.match(save(ADMIN, { UserEmail: 'new@farm.nz', Username: 'abc', FullName: 'X', Role: 'User', AccessCode: '0123' }, true).error, /Access code/);
+  assert.match(save(ADMIN, { UserEmail: 'ghost@farm.nz', Username: 'ghost', FullName: 'X', Role: 'User' }).error, /not found/);
 
-  // Promote to analyst, change code, then deactivate: the old code stops working.
-  const edit = save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam', FullName: 'Sam Wilson', Role: 'Analyst', Active: true, AccessCode: '765432' });
-  assert.equal(edit.user.Role, 'Analyst');
-  assert.equal(g.post({ action: 'login', login: 'sam', code: add.user.AccessCode }).ok, false);
-  assert.equal(g.post({ action: 'login', login: 'sam', code: '765432' }).user.Role, 'Analyst');
-  save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam', FullName: 'Sam Wilson', Role: 'Analyst', Active: false });
+  // Promote to Admin: a code is created; then change code; then deactivate.
+  const promoted = save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam', FullName: 'Sam Wilson', Role: 'Admin', Active: true });
+  assert.equal(promoted.user.Role, 'Admin');
+  assert.match(promoted.user.AccessCode, /^[1-9]\d{5}$/);
+  save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam', FullName: 'Sam Wilson', Role: 'Admin', Active: true, AccessCode: '765432' });
+  assert.equal(g.post({ action: 'login', login: 'sam', code: promoted.user.AccessCode }).ok, false);
+  assert.equal(g.post({ action: 'login', login: 'sam', code: '765432' }).user.Role, 'Admin');
+  save(ADMIN, { UserEmail: 'sam@farm.nz', Username: 'sam', FullName: 'Sam Wilson', Role: 'Admin', Active: false });
   assert.match(g.post({ action: 'login', login: 'sam', code: '765432' }).error, /not active/);
 
-  // Admins cannot lock themselves out; non-admins cannot manage users.
-  assert.match(save(ADMIN, { UserEmail: 'admin@farm.nz', Username: 'ana', FullName: 'Ana Admin', Role: 'Analyst', Active: true }).error, /your own administrator/);
-  assert.match(save(ADMIN, { UserEmail: 'admin@farm.nz', Username: 'ana', FullName: 'Ana Admin', Role: 'Administrator', Active: false }).error, /your own administrator/);
-  assert.match(save(LAB, { UserEmail: 'x@farm.nz', Username: 'x', FullName: 'X', Role: 'Administrator' }, true).error, /Administrators only/);
-  assert.equal(g.post({ action: 'listUsers', ...LAB }).ok, false);
+  // Owners cannot lock themselves out; admins and users cannot manage people.
+  assert.match(save(ADMIN, { UserEmail: 'admin@farm.nz', Username: 'ana', FullName: 'Ana Admin', Role: 'Admin', Active: true }).error, /your own owner/);
+  assert.match(save(ADMIN, { UserEmail: 'admin@farm.nz', Username: 'ana', FullName: 'Ana Admin', Role: 'Owner', Active: false }).error, /your own owner/);
+  assert.match(save(LAB, { UserEmail: 'x@farm.nz', Username: 'x', FullName: 'X', Role: 'Owner' }, true).error, /Owners only/);
+  assert.match(save({ login: 'bea', code: '555000' }, { UserEmail: 'x@farm.nz', Username: 'x', FullName: 'X', Role: 'User' }, true).error, /Owners only/);
 
-  // Other administrators are view-only; an admin can still change their own details and code.
-  const bob = save(ADMIN, { UserEmail: 'bob@farm.nz', Username: 'bob', FullName: 'Bob Boss', Role: 'Administrator' }, true);
+  // Other owners are view-only; an owner can still change their own details and code.
+  const bob = save(ADMIN, { UserEmail: 'bob@farm.nz', Username: 'bob', FullName: 'Bob Boss', Role: 'Owner' }, true);
   assert.equal(bob.ok, true);
   const BOB = { login: 'bob', code: bob.user.AccessCode };
-  for (const change of [{ AccessCode: '999999' }, { Role: 'Analyst' }, { Active: false }, { FullName: 'Renamed' }]) {
-    const r = save(BOB, { UserEmail: 'admin@farm.nz', Username: 'ana', FullName: 'Ana Admin', Role: 'Administrator', Active: true, ...change });
+  for (const change of [{ AccessCode: '999999' }, { Role: 'Admin' }, { Active: false }, { FullName: 'Renamed' }]) {
+    const r = save(BOB, { UserEmail: 'admin@farm.nz', Username: 'ana', FullName: 'Ana Admin', Role: 'Owner', Active: true, ...change });
     assert.match(r.error, /viewed but not changed/, JSON.stringify(change));
   }
   assert.equal(g.post({ action: 'login', login: 'ana', code: '111111' }).ok, true, 'Ana unchanged');
   assert.equal(g.post({ action: 'listUsers', ...BOB }).users.find((u) => u.Username === 'ana').AccessCode, '111111', 'codes are visible');
-  const own = save(BOB, { UserEmail: 'bob@farm.nz', Username: 'bobby', FullName: 'Bob B', Role: 'Administrator', Active: true, AccessCode: '424242' });
+  const own = save(BOB, { UserEmail: 'bob@farm.nz', Username: 'bobby', FullName: 'Bob B', Role: 'Owner', Active: true, AccessCode: '424242' });
   assert.equal(own.ok, true, own.error);
   assert.equal(g.post({ action: 'login', login: 'bobby', code: '424242' }).user.FullName, 'Bob B');
+  // Owners can change Admins.
+  assert.equal(save({ login: 'bobby', code: '424242' }, { UserEmail: 'boss@farm.nz', Username: 'bea', FullName: 'Bea Boss', Role: 'User', Active: true }).ok, true);
 
-  const list = g.post({ action: 'listUsers', ...ADMIN });
-  assert.ok(list.users.find((u) => u.UserEmail === 'sam@farm.nz').AccessCode === '765432');
   const audit = g.table('AuditLog').filter((a) => a.TableName === 'Users').map((a) => a.Summary);
-  assert.deepEqual(audit, ['Added as Collector', 'Role: Collector → Analyst; AccessCode changed', 'Active: true → false',
-    'Added as Administrator', 'Username: bob → bobby; FullName: Bob Boss → Bob B; AccessCode changed']);
-  assert.ok(audit.every((x) => !/765432/.test(x)), 'codes never written to the audit log');
+  assert.equal(audit[0], 'Added as User');
+  assert.equal(audit[1], 'Role: User → Admin; AccessCode changed');
+  assert.ok(audit.every((x) => !/765432|424242/.test(x)), 'codes never written to the audit log');
 });
 
 test('split: Users, blocks and help move to a separate Users & Setup sheet', () => {
@@ -415,7 +434,7 @@ test('split: Users, blocks and help move to a separate Users & Setup sheet', () 
   assert.throws(() => g.gs.connectSetupSheet_('https://docs.google.com/spreadsheets/d/UNKNOWN_SHEET_00000000000/edit'), /Could not open/);
 
   const msg = g.gs.connectSetupSheet_('https://docs.google.com/spreadsheets/d/SETUP_SHEET_ID_000000000000000/edit#gid=0');
-  assert.match(msg, /Users: 4 rows copied and checked/);
+  assert.match(msg, /Users: 5 rows copied and checked/);
   assert.match(msg, /BlockVarieties: 39 rows copied and checked/);
   assert.equal(g.props.SETUP_SHEET_ID, 'SETUP_SHEET_ID_000000000000000');
 
@@ -425,7 +444,7 @@ test('split: Users, blocks and help move to a separate Users & Setup sheet', () 
   assert.ok(old && old.isSheetHidden());
   assert.ok(g.ss.getSheetByName('Samples'));
   assert.equal(setup.getSheetByName('Samples'), null);
-  assert.equal(g.table('Users', setup).length, 4);
+  assert.equal(g.table('Users', setup).length, 5);
   assert.equal(g.table('Users', setup)[0].UserName, 'legacy');
 
   // Everything now reads and writes the new sheet.
@@ -433,7 +452,7 @@ test('split: Users, blocks and help move to a separate Users & Setup sheet', () 
   assert.equal(g.post({ action: 'pull', ...LAB }).blocks.length, 39);
   const added = g.post({ action: 'saveUser', ...ADMIN, isNew: true, user: { UserEmail: 'sam@farm.nz', Username: 'sam', FullName: 'Sam', Role: 'Collector' } });
   assert.equal(added.ok, true, added.error);
-  assert.equal(g.table('Users', setup).length, 5);
+  assert.equal(g.table('Users', setup).length, 6);
   assert.equal(g.table('AuditLog', setup).length, 1, 'user changes logged in the Users & Setup sheet');
   assert.equal(g.table('AuditLog', g.ss).length, 0);
   assert.equal(push(g, LAB, [newSample('sample-0002', { CollectorEmail: 'lab@farm.nz', SampleNumber: 7 })]).results[0].ok, true);
@@ -512,7 +531,7 @@ test('plant checks: saved with block snapshot, season and server-assigned record
   assert.equal(pulled.plantChecks[0].InspectionDate, '2026-11-10');
   assert.equal(pulled.plantChecks[0].InspectionTime, '09:15');
 
-  const exp = g.post({ action: 'export', ...COL, type: 'plant', season: '2026/27' });
+  const exp = g.post({ action: 'export', ...ADMIN, type: 'plant', season: '2026/27' });
   assert.equal(exp.ok, true, exp.error);
   const lines = exp.csv.trim().split('\r\n');
   assert.equal(lines.length, 3);
@@ -527,8 +546,8 @@ test('plant checks: validation follows the form', () => {
   assert.match(bad({ GrowthStage: 'Flowering' }), /not a choice/);
   assert.match(bad({ Row: '' }), /Row # must be/);
   assert.match(bad({ Bay: 0 }), /Bay # must be/);
-  assert.match(bad({ BinesTrained: 43 }), /bines trained must be a whole number from 0 to 42/);
-  assert.match(bad({ BinesTrained: 2.5 }), /bines trained/);
+  assert.match(bad({ BinesTrained: 43 }), /bines on string must be a whole number from 0 to 42/);
+  assert.match(bad({ BinesTrained: 2.5 }), /bines on string/);
   assert.match(bad({ AvgBineHeightCm: -1 }), /Average bine height/);
   assert.match(bad({ MaxBineHeightCm: 50 }), /Maximum bine height cannot be less than the average/);
   assert.match(bad({ LeafColour: 8 }), /Leaf colour/);
@@ -640,4 +659,98 @@ test('live and test copies: environment, and a test copy links only to test shee
   assert.equal(g.post({ action: 'login', ...LAB }).ok, false, 'live codes no longer apply');
   assert.deepEqual(g.post({ action: 'pull', login: 'lee', code: '999999' }).blocks.map((b) => b.BlockVarietyID), ['T1-TEST']);
   assert.match(g.gs.connectionsSummary_(), /This script is the TEST server/);
+});
+
+// ---------------------------------------------------------------------------
+// Shared tablets: an admin/owner sets the tablet up once; workers pick their name.
+// ---------------------------------------------------------------------------
+test('tablet sign-in: set up once, workers pick their name or add themselves, no codes', () => {
+  const g = createSeededGas({ split: true });
+  assert.equal(g.setup.getSheetByName('Devices') !== null, true);
+  // Only admins/owners can set up a tablet.
+  assert.match(g.post({ action: 'registerDevice', ...LAB, deviceName: 'x' }).error, /Admins and owners only/);
+  const reg = g.post({ action: 'registerDevice', ...ADMIN, deviceName: 'Field tablet 1' });
+  assert.equal(reg.ok, true, reg.error);
+  const device = { id: reg.device.id, token: reg.device.token };
+  assert.equal(g.table('Devices', g.setup)[0].DeviceName, 'Field tablet 1');
+  assert.notEqual(g.table('Devices', g.setup)[0].TokenHash, device.token, 'only a hash of the key is stored');
+
+  // The name list: Users only (admins/owners use their code).
+  const names = g.post({ action: 'workers', device }).workers.map((w) => w.FullName);
+  assert.deepEqual(names, ['Cole Collector', 'Lee Analyst']);
+  assert.equal(g.post({ action: 'workers', device: { ...device, token: 'wrong' } }).auth, true);
+
+  // Pick a name: no code needed.
+  const asLee = { device, worker: 'lab@farm.nz' };
+  assert.equal(g.post({ action: 'login', ...asLee }).user.FullName, 'Lee Analyst');
+  assert.match(g.post({ action: 'login', device, worker: 'admin@farm.nz' }).error, /sign in with their access code/);
+  assert.match(g.post({ action: 'pull', device }).error, /Choose your name/);
+
+  // "I'm new here"
+  assert.match(g.post({ action: 'registerWorker', device, fullName: 'Lee Analyst' }).error, /already on the list/);
+  assert.match(g.post({ action: 'registerWorker', ...LAB, fullName: 'Someone' }).error, /set up by an admin/);
+  const sam = g.post({ action: 'registerWorker', device, fullName: '  Sam   Wilson ' });
+  assert.equal(sam.ok, true, sam.error);
+  assert.deepEqual([sam.user.FullName, sam.user.Role, sam.user.UserEmail], ['Sam Wilson', 'User', 'sam.wilson@workers.hopfarm']);
+  const sam2 = g.post({ action: 'registerWorker', device, fullName: 'Sam Wilson-Jones', email: 'SJ@farm.nz' });
+  assert.equal(sam2.user.UserEmail, 'sj@farm.nz');
+  assert.ok(g.post({ action: 'workers', device }).workers.some((w) => w.FullName === 'Sam Wilson'));
+
+  // Work done by several people on the tablet uploads in one go, each change checked
+  // against the person who made it.
+  const asSam = { device, worker: sam.user.UserEmail };
+  const r = push(g, asSam, [
+    { ...newSample('sample-sam1', { CollectorEmail: sam.user.UserEmail }), actor: sam.user.UserEmail },
+    { ...newSample('sample-lee1', { CollectorEmail: 'lab@farm.nz', SampleNumber: 77 }), actor: 'lab@farm.nz' },
+    { ...newSample('sample-ana1', { CollectorEmail: 'admin@farm.nz', SampleNumber: 78 }), actor: 'admin@farm.nz' },
+    { ...newSample('sample-bad1', { CollectorEmail: 'lab@farm.nz', SampleNumber: 79 }), actor: sam.user.UserEmail },
+  ]);
+  assert.deepEqual(r.results.map((x) => x.ok), [true, true, false, false]);
+  assert.match(r.results[2].error, /Sign in as Ana Admin/);
+  assert.match(r.results[3].error, /own name/);
+  assert.equal(g.table('Samples').find((x) => x.SampleID === 'sample-lee1').LastModifiedBy, 'lab@farm.nz');
+  // The owner's own change uploads once they sign in with their code on the tablet.
+  const r2 = push(g, { ...ADMIN, device }, [{ ...newSample('sample-ana1', { CollectorEmail: 'admin@farm.nz', SampleNumber: 78 }), actor: 'admin@farm.nz' }]);
+  assert.equal(r2.results[0].ok, true, r2.results[0].error);
+  // A worker's change from a tablet can't be uploaded without the tablet's key.
+  assert.match(push(g, ADMIN, [{ ...newSample('sample-x', { CollectorEmail: 'lab@farm.nz', SampleNumber: 80 }), actor: 'lab@farm.nz' }]).results[0].error, /on a set-up tablet/);
+  // Workers get no reports; exports need an admin.
+  assert.match(g.post({ action: 'export', ...asLee, type: 'leaves' }).error, /Admins and owners only/);
+
+  // Owners see and remove tablets; a removed tablet stops working.
+  const devices = g.post({ action: 'listDevices', ...ADMIN }).devices;
+  assert.equal(devices.length, 1);
+  assert.equal('TokenHash' in devices[0], false);
+  assert.match(g.post({ action: 'listDevices', login: 'bea', code: '555000' }).error, /Owners only/);
+  assert.equal(g.post({ action: 'setDeviceActive', ...ADMIN, deviceId: device.id, active: false }).ok, true);
+  assert.match(g.post({ action: 'login', ...asLee }).error, /removed/);
+});
+
+test('tablet sign-in on an existing setup: the Devices tab is created when the first tablet is set up', () => {
+  const g = createSeededGas();
+  delete g.sheets.Devices;
+  assert.equal(g.ss.getSheetByName('Devices'), null);
+  const reg = g.post({ action: 'registerDevice', ...ADMIN, deviceName: 'Office laptop' });
+  assert.equal(reg.ok, true, reg.error);
+  assert.equal(g.table('Devices').length, 1);
+  assert.equal(g.post({ action: 'login', device: reg.device, worker: 'col@farm.nz' }).user.FullName, 'Cole Collector');
+});
+
+test('Users reopen only samples they analysed, within 31 days; admins any time', () => {
+  const g = createSeededGas();
+  const BEA = { login: 'bea', code: '555000' };
+  push(g, COL, [newSample('sample-0001')]);
+  push(g, LAB, [newLeaf('leaf-00001', 'sample-0001', 1),
+    { table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis In Progress', AnalysisStartedBy: 'lab@farm.nz', AnalysisStartedAt: new Date().toISOString() } },
+    { table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis Complete', CompletedBy: 'lab@farm.nz', AnalysisCompletedAt: new Date().toISOString(), ActualLeafCount: 1, EarlyCompletionReason: 'Damaged leaves' } }]);
+  let r = push(g, COL, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis In Progress' } }]);
+  assert.match(r.results[0].error, /Only the person who analysed this sample/);
+  r = push(g, COL, [{ table: 'LeafAnalysis', id: 'leaf-00001', patch: { TetranychusCount: 5 } }]);
+  assert.match(r.results[0].error, /Only the person who analysed this sample/);
+  r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis In Progress' } }]);
+  assert.equal(r.results[0].ok, true, r.results[0].error);
+  r = push(g, LAB, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis Complete', EarlyCompletionReason: 'Damaged leaves' } }]);
+  assert.equal(r.results[0].ok, true, r.results[0].error);
+  r = push(g, BEA, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis In Progress' } }]);
+  assert.equal(r.results[0].ok, true, 'admins can reopen any sample');
 });

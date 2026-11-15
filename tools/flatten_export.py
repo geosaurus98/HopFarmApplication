@@ -22,7 +22,9 @@ LEAF_EXPORT_HEADERS = [
     "SampleID", "SampleNumber", "Season", "CollectionDate", "WeekStarting", "Collector", "Block",
     "Variety", "AreaHa", "TargetLeafCount", "LeafNumber", "Analyst", "AnalysisDateTime",
     "PhytoseiulusCount", "TetranychusCount", "PredatorEggCount", "TwoSpotEggCount",
-    "OtherBeneficialCount", "OtherBeneficialDescription", "LeafComment", "SampleComments",
+    "DeadTetranychusCount", "EatenTwoSpotEggCount", "OtherBeneficialCount",
+    "LadybirdStethorusCount", "LadybirdOtherCount", "LacewingCount", "PredatoryThripsCount", "PredatoryMidgeCount",
+    "SpiderCount", "BeneficialOtherCount", "OtherBeneficialDescription", "LeafComment", "SampleComments",
     "AnalysisComments", "SampleStatus", "SamplePhoto1", "SamplePhoto2", "LeafPhoto",
 ]
 
@@ -31,7 +33,14 @@ SUMMARY_HEADERS = [
     "Status", "TargetLeafCount", "LeavesAnalysed", "BelowTarget",
     "TotalTwoSM", "AvgTwoSMPerLeaf", "TotalPP", "AvgPPPerLeaf",
     "TotalTwoSMEggs", "TotalPredatorEggs", "TotalOtherBeneficial",
-    "PredatorToPestRatio", "LeavesWithTwoSM", "PctLeavesWithTwoSM", "EarlyCompletionReason",
+    "PredatorToPestRatio", "LeavesWithTwoSM", "PctLeavesWithTwoSM", "TotalDead2SM", "TotalEaten2SMEggs",
+    "EarlyCompletionReason",
+]
+
+# Added Nov 2026; blank on leaves recorded before then.
+EXTRA_LEAF_FIELDS = [
+    "DeadTetranychusCount", "EatenTwoSpotEggCount", "LadybirdStethorusCount", "LadybirdOtherCount",
+    "LacewingCount", "PredatoryThripsCount", "PredatoryMidgeCount", "SpiderCount", "BeneficialOtherCount",
 ]
 
 COUNT_FIELDS = [
@@ -91,7 +100,7 @@ def flatten(samples: list[dict], leaves: list[dict], users: list[dict] | None = 
             "Block": s["Block"], "Variety": s["Variety"], "AreaHa": s.get("AreaHaAtCollection", ""),
             "TargetLeafCount": s.get("TargetLeafCount", ""), "LeafNumber": leaf["LeafNumber"],
             "Analyst": name(leaf.get("AnalystEmail", "")), "AnalysisDateTime": leaf.get("AnalysisDateTime", ""),
-            **{f: leaf.get(f, "") for f in COUNT_FIELDS},
+            **{f: leaf.get(f, "") for f in COUNT_FIELDS + EXTRA_LEAF_FIELDS},
             "OtherBeneficialDescription": leaf.get("OtherBeneficialDescription", ""),
             "LeafComment": leaf.get("LeafComment", ""), "SampleComments": s.get("SampleComments", ""),
             "AnalysisComments": s.get("AnalysisComments", ""), "SampleStatus": s.get("Status", ""),
@@ -129,6 +138,8 @@ def summarise(samples: list[dict], leaves: list[dict]) -> list[dict]:
             "TotalOtherBeneficial": tot["OtherBeneficialCount"],
             "PredatorToPestRatio": round(pp / tsm, 3) if tsm else "",
             "LeavesWithTwoSM": infested, "PctLeavesWithTwoSM": round(infested / n, 3) if n else "",
+            "TotalDead2SM": sum(_int(l.get("DeadTetranychusCount")) for l in ls),
+            "TotalEaten2SMEggs": sum(_int(l.get("EatenTwoSpotEggCount")) for l in ls),
             "EarlyCompletionReason": s.get("EarlyCompletionReason", ""),
         })
     return out

@@ -22,19 +22,29 @@ export const getStatus = () => state;
 export class AuthError extends Error {}
 export class OfflineError extends Error {}
 
-/** POST to the API. text/plain avoids a CORS preflight, which Apps Script cannot answer. */
+/**
+ * POST to the API. text/plain avoids a CORS preflight, which Apps Script cannot answer.
+ * Credentials sent:
+ *  - the tablet's key, if an admin/owner set this tablet up (lets workers pick their name);
+ *  - the picked worker, or the login + code of someone signed in with a code.
+ * `creds` overrides the session for a sign-in attempt: { apiUrl, login, code } or { apiUrl, worker }.
+ */
 export async function api(action, params = {}, creds) {
   const session = creds || (await db.getMeta('session'));
-  const url = session?.apiUrl;
+  const device = await db.getMeta('device');
+  const url = session?.apiUrl || device?.apiUrl;
   if (!url) throw new AuthError('No server address set.');
   if (!navigator.onLine) throw new OfflineError('No internet connection.');
+  const auth = {};
+  if (device && device.apiUrl === url) auth.device = { id: device.id, token: device.token };
+  if (session?.code) { auth.login = session.login || session.email; auth.code = session.code; }
+  else if (session?.worker || session?.user?.UserEmail) auth.worker = session.worker || session.user.UserEmail;
   let res;
   try {
     res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      // Older sessions stored `email`; the server accepts either.
-      body: JSON.stringify({ action, login: session.login || session.email, code: session.code, ...params }),
+      body: JSON.stringify({ action, ...auth, ...params }),
       redirect: 'follow',
     });
   } catch (e) {
@@ -120,7 +130,7 @@ async function pushOutbox() {
   for (let i = 0; i < ready.length; i += PUSH_BATCH) {
     const batch = ready.slice(i, i + PUSH_BATCH);
     const { results } = await api('push', {
-      ops: batch.map((o) => ({ seq: o.seq, table: o.table, id: o.id, isNew: o.isNew, patch: o.patch })),
+      ops: batch.map((o) => ({ seq: o.seq, table: o.table, id: o.id, isNew: o.isNew, patch: o.patch, actor: o.actor || '' })),
     });
     const bySeq = new Map(results.map((r) => [r.seq, r]));
     for (const o of batch) {

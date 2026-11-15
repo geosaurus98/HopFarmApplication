@@ -47,9 +47,15 @@ test('counts: zero valid, blank / negative / decimal rejected', () => {
   assert.equal(L.parseCount('').error, 'required');
   assert.equal(L.parseCount('-1').error, 'negative');
   assert.equal(L.parseCount('1.5').error, 'whole');
-  const leaf = { LeafAnalysisID: 'a', LeafNumber: 2, TetranychusCount: '0', PhytoseiulusCount: '0', TwoSpotEggCount: '0', PredatorEggCount: '0', OtherBeneficialCount: '0' };
+  const leaf = { LeafAnalysisID: 'a', LeafNumber: 2, ...Object.fromEntries(L.LEAF_INPUT_FIELDS.map((f) => [f.key, '0'])) };
   assert.deepEqual(L.validateLeaf(leaf, []), {});
   assert.ok(L.validateLeaf({ ...leaf, PhytoseiulusCount: '' }).PhytoseiulusCount);
+  assert.ok(L.validateLeaf({ ...leaf, SpiderCount: '-1' }).SpiderCount);
+  // Leaf screen values: 0 by default; an older leaf's single beneficial count lands on its type.
+  assert.equal(L.leafFormValues(null).DeadTetranychusCount, 0);
+  const oldLeaf = L.leafFormValues({ TetranychusCount: 3, OtherBeneficialCount: 2, OtherBeneficialDescription: 'Lacewing' });
+  assert.deepEqual([oldLeaf.TetranychusCount, oldLeaf.LacewingCount, oldLeaf.BeneficialOtherCount], [3, 2, 0]);
+  assert.equal(L.beneficialTotal({ LacewingCount: 2, SpiderCount: 1 }), 3);
   assert.ok(L.validateLeaf(leaf, [{ LeafAnalysisID: 'b', LeafNumber: 2 }]).LeafNumber);
   assert.deepEqual(L.validateLeaf(leaf, [{ LeafAnalysisID: 'b', LeafNumber: 2, Deleted: true }]), {});
   assert.deepEqual(L.highCounts({ ...leaf, TetranychusCount: 101 }).map((f) => f.short), ['2SM']);
@@ -130,37 +136,44 @@ test('help image links: Drive share links become direct images', () => {
   assert.equal(L.helpImageUrl(''), '');
 });
 
-test('permissions by role and status', () => {
+test('permissions by level and status', () => {
+  const now = Date.parse('2026-11-06T00:00:00Z');
   const aw = { Status: 'Awaiting Analysis', CollectorEmail: 'c@x' };
   const ip = { Status: 'Analysis In Progress', CollectorEmail: 'c@x' };
-  const done = { Status: 'Analysis Complete', CollectorEmail: 'c@x' };
-  assert.equal(L.can('Collector', 'startAnalysis', aw), false);
-  assert.equal(L.can('Analyst', 'startAnalysis', aw), true);
-  assert.equal(L.can('Analyst', 'completeAnalysis', ip), true);
-  assert.equal(L.can('Analyst', 'editLeaves', done), false);
-  assert.equal(L.can('Administrator', 'editLeaves', done), true);
-  assert.equal(L.can('Collector', 'editSample', aw, 'c@x'), true);
-  assert.equal(L.can('Collector', 'editSample', aw, 'other@x'), false);
-  assert.equal(L.can('Collector', 'cancelSample', aw, 'c@x'), true);
-  assert.equal(L.can('Collector', 'cancelSample', ip, 'c@x'), false);
-  assert.equal(L.can('Analyst', 'changeBlock', ip), false);
-  assert.equal(L.can('Administrator', 'reopen', done), true);
-  // Analysts can correct completed samples for 31 days after completion.
-  const now = Date.parse('2026-11-06T00:00:00Z');
-  const recent = { ...done, AnalysisCompletedAt: '2026-10-10T00:00:00Z' };
-  const old = { ...done, AnalysisCompletedAt: '2026-10-01T00:00:00Z' };
-  assert.equal(L.can('Analyst', 'editLeaves', recent, '', now), true);
-  assert.equal(L.can('Analyst', 'reopen', recent, '', now), true);
-  assert.equal(L.can('Analyst', 'editSample', recent, '', now), true);
-  assert.equal(L.can('Analyst', 'addLeaves', recent, '', now), false); // reopen first
-  assert.equal(L.can('Analyst', 'changeBlock', recent, '', now), false);
-  assert.equal(L.can('Collector', 'editLeaves', recent, '', now), false);
-  assert.equal(L.can('Analyst', 'editLeaves', old, '', now), false);
-  assert.equal(L.can('Analyst', 'reopen', old, '', now), false);
-  assert.equal(L.can('Administrator', 'editLeaves', old, '', now), true);
-  assert.equal(L.can('Analyst', 'reopen', done), false); // no completion date
-  assert.equal(L.analystEditUntil(recent).toISOString().slice(0, 10), '2026-11-10');
+  const mine = { Status: 'Analysis Complete', CollectorEmail: 'c@x', AnalysisStartedBy: 'a@x', CompletedBy: 'a@x', AnalysisCompletedAt: '2026-10-10T00:00:00Z' };
+  const old = { ...mine, AnalysisCompletedAt: '2026-10-01T00:00:00Z' };
+  // Users collect and analyse.
+  for (const a of ['createSample', 'analyse']) assert.equal(L.can('User', a), true, a);
+  assert.equal(L.can('User', 'startAnalysis', aw), true);
+  assert.equal(L.can('User', 'completeAnalysis', ip), true);
+  assert.equal(L.can('User', 'editLeaves', ip), true);
+  // ...reopen/correct only what they analysed, within 31 days.
+  assert.equal(L.can('User', 'reopen', mine, 'a@x', now), true);
+  assert.equal(L.can('User', 'editLeaves', mine, 'a@x', now), true);
+  assert.equal(L.can('User', 'addLeaves', mine, 'a@x', now), false, 'reopen first');
+  assert.equal(L.can('User', 'reopen', mine, 'someone@x', now), false);
+  assert.equal(L.can('User', 'reopen', old, 'a@x', now), false);
+  assert.equal(L.can('User', 'changeBlock', ip), false);
+  // ...cancel only their own uncollected-for-analysis samples.
+  assert.equal(L.can('User', 'cancelSample', aw, 'c@x'), true);
+  assert.equal(L.can('User', 'cancelSample', aw, 'other@x'), false);
+  assert.equal(L.can('User', 'cancelSample', ip, 'c@x'), false);
+  // Reports, all completed, exports: admins and owners.
+  for (const a of ['reports', 'export', 'viewAllCompleted', 'admin']) {
+    assert.equal(L.can('User', a), false, a);
+    assert.equal(L.can('Admin', a), true, a);
+    assert.equal(L.can('Owner', a), true, a);
+  }
+  assert.equal(L.can('Admin', 'reopen', old, 'x@x', now), true);
+  assert.equal(L.can('Admin', 'restore', { Status: 'Cancelled' }), true);
+  // People and tablets: owners.
+  assert.equal(L.can('Admin', 'owner'), false);
+  assert.equal(L.can('Owner', 'owner'), true);
+  // Old role names still work.
+  assert.equal(L.can('Administrator', 'owner'), true);
+  assert.equal(L.can('Analyst', 'analyse'), true);
   assert.equal(L.can('Collector', 'export'), false);
+  assert.equal(L.analystEditUntil({ AnalysisCompletedAt: '2026-10-10T00:00:00Z' }).toISOString().slice(0, 10), '2026-11-10');
 });
 
 test('plant check: questions follow the form notes', () => {

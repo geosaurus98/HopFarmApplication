@@ -93,6 +93,10 @@ export async function replaceAll(store, rows) {
   return done(t);
 }
 
+/** The person signed in on this device; stamped on every queued change. */
+let currentActor = '';
+export const setActor = (email) => { currentActor = email || ''; };
+
 export const getMeta = (key) => get('meta', key);
 export const setMeta = (key, value) => put('meta', value, key);
 
@@ -110,7 +114,7 @@ export async function saveChanges(changes, photos = []) {
     if (c.remove) t.objectStore(STORES[c.table]).delete(c.record[key]);
     else t.objectStore(STORES[c.table]).put(c.record);
     t.objectStore('outbox').add({
-      table: c.table, id: c.record[key], isNew: !!c.isNew, patch: c.patch, queuedAt: new Date().toISOString(),
+      table: c.table, id: c.record[key], isNew: !!c.isNew, patch: c.patch, queuedAt: new Date().toISOString(), actor: currentActor,
     });
   }
   photos.forEach((p) => t.objectStore('photos').put({ ...p, queuedAt: new Date().toISOString() }));

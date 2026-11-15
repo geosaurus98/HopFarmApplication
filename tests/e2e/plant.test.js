@@ -19,23 +19,27 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_INTERNET_DISCONNECTED/.test(m.text())) errors.push(m.text()); });
   const shot = async (name, opts = {}) => { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: `${SHOTS}/${name}.png`, ...opts }); } };
 
-  async function signIn(login, code) {
-    await page.goto(`${url}/#/login`);
+  /** Sign in with a code (an owner on a new tablet also sets it up for workers). */
+  async function codeSignIn(login, code) {
+    await page.goto(`${url}/#/login/code`);
     await page.waitForSelector('#login');
     await page.fill('#login', login);
     await page.fill('#code', code);
-    if (!(await page.isVisible('#apiUrl'))) await page.click('summary:has-text("Server address")');
-    await page.fill('#apiUrl', '/api');
+    if (await page.isEnabled('#apiUrl')) {
+      if (!(await page.isVisible('#apiUrl'))) await page.click('summary:has-text("Server address")');
+      await page.fill('#apiUrl', '/api');
+    }
     await page.click('button:has-text("Sign in")');
     await page.waitForSelector('.tiles, form p.error:not(:empty)');
     const err = await page.$eval('form p.error', (e) => e.textContent).catch(() => '');
     if (err) throw new Error(`Sign-in as ${login} failed: ${err}`);
   }
-  async function signOut() {
-    await page.goto(`${url}/#/sync`);
-    await page.click('button:has-text("Sign out")');
-    await page.click('dialog button:has-text("Sign out")');
-    await page.waitForSelector('#login');
+  /** On the set-up tablet: change person, then tap a name. */
+  async function pickName(name) {
+    await page.goto(`${url}/#/switch`);
+    await page.waitForSelector('#whoList');
+    await page.click(`.who-btn:has-text("${name}")`);
+    await page.waitForSelector('.tiles');
   }
   async function syncNow() {
     await page.goto(`${url}/#/sync`);
@@ -44,17 +48,19 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
   }
 
   try {
-    await signIn('cole', '222222');
+    await codeSignIn('ana', '111111'); // the owner sets the tablet up
+    await pickName('Cole Collector');
     // Not the workers' address, and a test server: orange TEST bar, no warning.
     assert.match(await page.textContent('#envBanner'), /TEST VERSION .* test data/);
     assert.equal(await page.isVisible('#envBanner.danger'), false);
     // Both sections on the home screen for someone with access to both.
-    assert.ok(await page.isVisible('h2.section-heading:has-text("Mite Monitoring")'));
-    assert.ok(await page.isVisible('h2.section-heading:has-text("Plant Health")'));
+    assert.ok(await page.isVisible('#goMites'));
+    assert.ok(await page.isVisible('#goPlants'));
     await page.waitForSelector('#syncBadge:has-text("All synced")');
 
     // ---- A weekly check, recorded offline ----
     await context.setOffline(true);
+    await page.click('#goPlants');
     await page.click('text=New Plant Check');
     await page.waitForSelector('#BlockVarietyID');
     assert.match(await page.inputValue('#InspectionDate'), /^\d{4}-\d{2}-\d{2}$/, 'date filled in');
@@ -157,8 +163,14 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
     await syncNow();
     assert.equal(g.table('PlantChecks').find((r) => r.Bay === 3).Comments, 'Wind damage, south end of row 14');
 
-    // ---- Reports ----
-    await page.goto(`${url}/#/plant-reports`);
+    // Users don't get reports.
+    await page.goto(`${url}/#/plant-health`);
+    assert.equal(await page.isVisible('text=Plant Reports'), false);
+
+    // ---- Reports (admins and owners) ----
+    await codeSignIn('ana', '111111');
+    await page.goto(`${url}/#/plant-health`);
+    await page.click('text=Plant Reports');
     await page.waitForSelector('.small-multiples .chart svg path.bar');
     await page.click('.chart-card:nth-child(1) .bar-group >> nth=0');
     assert.match(await page.textContent('.chart-card:nth-child(1) .chart-readout'), /Row 14 bay 3: 85 cm average height/);
@@ -170,35 +182,35 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
     assert.ok(csv[0].startsWith('RecordNumber,Season,InspectionDate,WeekStarting,InspectionTime,Inspector,Block,Variety,Row,Bay'));
     assert.ok(csv[1].includes(',Cole Collector,C2,Riwaka,14,3,'));
 
-    // Help shows the plant reference pictures.
-    await page.goto(`${url}/#/help`);
-    await page.waitForSelector('.help-thumb:has-text("Molybdenum")');
-    assert.equal(await page.$$eval('.help-thumb', (els) => els.length), 16);
+    // Help: Plant Health section, each picture large when opened; Nitrogen (2) / Potassium (2) gone.
+    await page.goto(`${url}/#/help/plant`);
+    await page.click('summary:has-text("Molybdenum deficiency")');
+    await page.waitForFunction(() => document.querySelector('#plant-molybdenum .help-photo')?.naturalWidth > 0);
+    const titles = await page.$$eval('.help-item summary', (els) => els.map((e) => e.textContent));
+    assert.equal(titles.filter((t) => /deficiency|aphids/.test(t)).length, 14);
+    assert.ok(!titles.some((t) => /\(2\)/.test(t)));
 
     // ---- Access: a plant-only person sees only Plant Health ----
-    await signOut();
-    await signIn('ana', '111111');
     await page.goto(`${url}/#/user/new`);
     await page.fill('#FullName', 'Pat Plants');
     await page.fill('#UserEmail', 'pat@farm.nz');
     await page.uncheck('#section-Mites');
-    await page.click('button:has-text("Add user")');
-    await page.waitForSelector('#newCode');
-    const patCode = await page.textContent('#newCode');
-    await signOut();
-    await signIn('pat', patCode);
-    assert.ok(await page.isVisible('text=New Plant Check'));
+    await page.click('button:has-text("Add person")');
+    await page.waitForSelector('#noCodeNote');
+    await pickName('Pat Plants');
+    assert.ok(await page.isVisible('text=New Plant Check'), 'goes straight to Plant Health');
     assert.equal(await page.isVisible('text=New Mite Sample'), false);
-    assert.equal(await page.isVisible('h2.section-heading:has-text("Plant Health")'), false, 'no section headings with one section');
+    assert.equal(await page.isVisible('#goMites'), false);
+    // Users see their own checks only.
     await page.goto(`${url}/#/plants`);
-    await page.waitForSelector('.sample-card:has-text("Row 14, Bay 3")');
-    await page.click('.sample-card:has-text("Row 14, Bay 3")');
-    await page.waitForSelector('h1:has-text("C2 - Riwaka")');
-    assert.equal(await page.isVisible('a:has-text("Edit")'), false, "cannot edit someone else's check");
+    await page.waitForSelector('text=No plant checks match.');
+    const cole = g.table('PlantChecks').find((r) => r.Bay === 3);
+    await page.goto(`${url}/#/plant/edit/${cole.CheckID}`);
+    await page.waitForSelector('text=This check can no longer be changed');
 
     // Phone width: no sideways scrolling on the plant screens.
     await page.setViewportSize({ width: 390, height: 800 });
-    for (const hash of ['#/', '#/plant/new', '#/plants', '#/plant-reports', '#/help']) {
+    for (const hash of ['#/', '#/plant-health', '#/plant/new', '#/plants', '#/help/plant']) {
       await page.goto(`${url}/${hash}`);
       await page.waitForTimeout(300);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -210,9 +222,8 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
 
     // A test app pointed at a LIVE server gets a red warning.
     await page.setViewportSize({ width: 1024, height: 700 });
-    await signOut();
     g.props.ENVIRONMENT = 'LIVE';
-    await signIn('cole', '222222');
+    await codeSignIn('cole', '222222');
     assert.match(await page.textContent('#envBanner.danger'), /connected to the LIVE server/);
     g.props.ENVIRONMENT = 'TEST';
 

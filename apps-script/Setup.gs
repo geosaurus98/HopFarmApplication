@@ -16,6 +16,8 @@
 // ---------------------------------------------------------------------------
 const SCHEMA = {
   Users: ['UserEmail', 'Username', 'FullName', 'Role', 'Sections', 'Active', 'AccessCode', 'CreatedAt', 'UpdatedAt'],
+  // Shared tablets an admin/owner has set up, so workers can sign in by picking their name.
+  Devices: ['DeviceID', 'DeviceName', 'TokenHash', 'AddedBy', 'AddedAt', 'Active'],
   BlockVarieties: ['BlockVarietyID', 'Block', 'Variety', 'AreaHa', 'Active', 'Notes', 'UpdatedAt'],
   Samples: [
     'SampleID', 'SampleNumber', 'CollectionDate', 'Season', 'CollectorEmail',
@@ -29,10 +31,14 @@ const SCHEMA = {
     'LeafAnalysisID', 'SampleID', 'LeafNumber', 'AnalystEmail', 'AnalysisDateTime',
     'TetranychusCount', 'PhytoseiulusCount', 'TwoSpotEggCount', 'PredatorEggCount',
     'OtherBeneficialCount', 'OtherBeneficialDescription', 'LeafComment', 'LeafPhoto',
-    'Deleted', 'CreatedAt', 'UpdatedAt', 'LastModifiedBy'
+    'Deleted', 'CreatedAt', 'UpdatedAt', 'LastModifiedBy',
+    // Added Nov 2026: dead / eaten counts, and each beneficial type (their sum is OtherBeneficialCount).
+    'DeadTetranychusCount', 'EatenTwoSpotEggCount',
+    'LadybirdStethorusCount', 'LadybirdOtherCount', 'LacewingCount', 'PredatoryThripsCount', 'PredatoryMidgeCount',
+    'SpiderCount', 'BeneficialOtherCount'
   ],
   AuditLog: ['AuditID', 'TableName', 'RowID', 'ChangedBy', 'ChangedAt', 'Summary'],
-  HelpReference: ['HelpID', 'Category', 'Title', 'Description', 'Image', 'SortOrder'],
+  HelpReference: ['HelpID', 'Category', 'Title', 'Description', 'Image', 'SortOrder', 'Section'],
   // Plant Health: one row per bay (7 plants between two posts) per visit.
   PlantChecks: [
     'CheckID', 'RecordNumber', 'Season', 'InspectionDate', 'InspectionTime', 'InspectorEmail',
@@ -82,7 +88,7 @@ const LEAF_COLOUR_STEPS = 7;
 // written to that sheet; everything else stays in this (Mite Monitoring)
 // sheet. Until then, everything is in this sheet.
 // ---------------------------------------------------------------------------
-const SETUP_TABLES = ['Users', 'BlockVarieties', 'HelpReference'];
+const SETUP_TABLES = ['Users', 'Devices', 'BlockVarieties', 'HelpReference'];
 const SETUP_SHEET_PROP = 'SETUP_SHEET_ID';
 const PLANT_TABLES = ['PlantChecks'];
 const PLANT_SHEET_PROP = 'PLANT_SHEET_ID';
@@ -122,11 +128,11 @@ function ssFor_(table) {
 
 const KEYS = {
   Users: 'UserEmail', BlockVarieties: 'BlockVarietyID', Samples: 'SampleID',
-  LeafAnalysis: 'LeafAnalysisID', AuditLog: 'AuditID', HelpReference: 'HelpID', PlantChecks: 'CheckID'
+  LeafAnalysis: 'LeafAnalysisID', AuditLog: 'AuditID', HelpReference: 'HelpID', PlantChecks: 'CheckID', Devices: 'DeviceID'
 };
 
 const DATE_COLUMNS = ['CollectionDate', 'InspectionDate'];
-const DATETIME_COLUMNS = ['CreatedAt', 'UpdatedAt', 'AnalysisStartedAt', 'AnalysisCompletedAt',
+const DATETIME_COLUMNS = ['CreatedAt', 'UpdatedAt', 'AnalysisStartedAt', 'AnalysisCompletedAt', 'AddedAt',
   'AnalysisDateTime', 'ChangedAt'];
 const BOOL_COLUMNS = ['Active', 'Deleted'];
 
@@ -144,10 +150,26 @@ const STATUS = {
   CANCELLED: 'Cancelled'
 };
 const STATUS_LIST = [STATUS.DRAFT, STATUS.AWAITING, STATUS.IN_PROGRESS, STATUS.COMPLETE, STATUS.CANCELLED];
-const ROLES = ['Collector', 'Analyst', 'Administrator'];
+/**
+ * User  — collects and analyses samples, does plant checks; reopens their own analyses (31 days).
+ * Admin — User + all completed / all samples, reports, exports, corrections.
+ * Owner — Admin + people, access codes and tablets.
+ */
+const ROLES = ['User', 'Admin', 'Owner'];
+/** Earlier role names, upgraded automatically. */
+const LEGACY_ROLES = { Collector: 'User', Analyst: 'User', Administrator: 'Owner' };
+
+function normalizeRole_(role) {
+  const r = String(role || '').trim();
+  return LEGACY_ROLES[r] || r;
+}
 
 const COUNT_FIELDS = ['TetranychusCount', 'PhytoseiulusCount', 'TwoSpotEggCount',
   'PredatorEggCount', 'OtherBeneficialCount'];
+/** Counts added later: may be blank on older leaves. */
+const EXTRA_COUNT_FIELDS = ['DeadTetranychusCount', 'EatenTwoSpotEggCount'];
+const BENEFICIAL_FIELDS = ['LadybirdStethorusCount', 'LadybirdOtherCount', 'LacewingCount', 'PredatoryThripsCount',
+  'PredatoryMidgeCount', 'SpiderCount', 'BeneficialOtherCount'];
 
 const HIGH_COUNT_THRESHOLD = 100;   // per-leaf count that is flagged for review
 const STALE_ANALYSIS_DAYS = 7;      // "In Progress" longer than this is flagged
@@ -339,7 +361,7 @@ function migrateUsers_(sh) {
   if (!sh || sh.getLastRow() < 2) return;
   const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
   const col = h => headers.indexOf(h);
-  const iEmail = col('UserEmail'), iUser = col('Username'), iFull = col('FullName'), iOld = col('UserName');
+  const iEmail = col('UserEmail'), iUser = col('Username'), iFull = col('FullName'), iOld = col('UserName'), iRole = col('Role');
   if (iUser === -1 || iFull === -1) return;
   const range = sh.getRange(2, 1, sh.getLastRow() - 1, headers.length);
   const rows = range.getValues();
@@ -347,6 +369,7 @@ function migrateUsers_(sh) {
   let changed = false;
   rows.forEach(r => {
     if (!String(r[iEmail]).trim()) return;
+    if (iRole !== -1 && LEGACY_ROLES[String(r[iRole]).trim()]) { r[iRole] = LEGACY_ROLES[String(r[iRole]).trim()]; changed = true; }
     if (!String(r[iFull]).trim()) {
       const old = iOld === -1 ? '' : String(r[iOld]).trim();
       if (old) { r[iFull] = old; changed = true; }
@@ -371,7 +394,7 @@ function defaultUsers_() {
   const me = Session.getActiveUser().getEmail();
   const now = new Date();
   return me ? [{
-    UserEmail: me, Username: usernameFromEmail_(me), FullName: me.split('@')[0], Role: 'Administrator', Active: true,
+    UserEmail: me, Username: usernameFromEmail_(me), FullName: me.split('@')[0], Role: 'Owner', Active: true,
     AccessCode: newAccessCode_(), CreatedAt: now, UpdatedAt: now
   }] : [];
 }
@@ -541,7 +564,9 @@ const LEAF_EXPORT_HEADERS = [
   'SampleID', 'SampleNumber', 'Season', 'CollectionDate', 'WeekStarting', 'Collector', 'Block',
   'Variety', 'AreaHa', 'TargetLeafCount', 'LeafNumber', 'Analyst', 'AnalysisDateTime',
   'PhytoseiulusCount', 'TetranychusCount', 'PredatorEggCount', 'TwoSpotEggCount',
-  'OtherBeneficialCount', 'OtherBeneficialDescription', 'LeafComment', 'SampleComments',
+  'DeadTetranychusCount', 'EatenTwoSpotEggCount', 'OtherBeneficialCount',
+  'LadybirdStethorusCount', 'LadybirdOtherCount', 'LacewingCount', 'PredatoryThripsCount', 'PredatoryMidgeCount',
+  'SpiderCount', 'BeneficialOtherCount', 'OtherBeneficialDescription', 'LeafComment', 'SampleComments',
   'AnalysisComments', 'SampleStatus', 'SamplePhoto1', 'SamplePhoto2', 'LeafPhoto'
 ];
 
@@ -550,7 +575,7 @@ const SUMMARY_HEADERS = [
   'Status', 'TargetLeafCount', 'LeavesAnalysed', 'BelowTarget',
   'TotalTwoSM', 'AvgTwoSMPerLeaf', 'TotalPP', 'AvgPPPerLeaf',
   'TotalTwoSMEggs', 'TotalPredatorEggs', 'TotalOtherBeneficial',
-  'PredatorToPestRatio', 'LeavesWithTwoSM', 'PctLeavesWithTwoSM', 'EarlyCompletionReason'
+  'PredatorToPestRatio', 'LeavesWithTwoSM', 'PctLeavesWithTwoSM', 'TotalDead2SM', 'TotalEaten2SMEggs', 'EarlyCompletionReason'
 ];
 
 function userNames_() {
@@ -594,9 +619,11 @@ function leafExportRows_(filter) {
         s.Block, s.Variety, s.AreaHaAtCollection, s.TargetLeafCount, l.LeafNumber,
         nameOf_(names, l.AnalystEmail), localDateTime_(l.AnalysisDateTime),
         l.PhytoseiulusCount, l.TetranychusCount, l.PredatorEggCount, l.TwoSpotEggCount,
-        l.OtherBeneficialCount, l.OtherBeneficialDescription, l.LeafComment, s.SampleComments,
+        l.DeadTetranychusCount === undefined ? '' : l.DeadTetranychusCount,
+        l.EatenTwoSpotEggCount === undefined ? '' : l.EatenTwoSpotEggCount,
+        l.OtherBeneficialCount].concat(BENEFICIAL_FIELDS.map(f => (l[f] === undefined ? '' : l[f])), [ l.OtherBeneficialDescription, l.LeafComment, s.SampleComments,
         s.AnalysisComments, s.Status, s.SamplePhoto1, s.SamplePhoto2, l.LeafPhoto
-      ];
+      ]);
     });
 }
 
@@ -618,7 +645,8 @@ function sampleSummaryRows_(filter) {
         s.TargetLeafCount, n, n < Number(s.TargetLeafCount) ? 'YES' : 'NO',
         tsm, n ? round_(tsm / n) : '', pp, n ? round_(pp / n) : '',
         sum('TwoSpotEggCount'), sum('PredatorEggCount'), sum('OtherBeneficialCount'),
-        tsm ? round_(pp / tsm) : '', infested, n ? round_(infested / n) : '', s.EarlyCompletionReason
+        tsm ? round_(pp / tsm) : '', infested, n ? round_(infested / n) : '',
+        sum('DeadTetranychusCount'), sum('EatenTwoSpotEggCount'), s.EarlyCompletionReason
       ];
     });
 }
@@ -630,7 +658,7 @@ const PLANT_EXPORT_HEADERS = [
   'RecordNumber', 'Season', 'InspectionDate', 'WeekStarting', 'InspectionTime', 'Inspector',
   'Block', 'Variety', 'Row', 'Bay',
   'BineHealth', 'CoirStatus', 'WeedPressure', 'GrassLength', 'TrellisIntegrity', 'IrrigationLeaks',
-  'GrowthStage', 'BinesTrained', 'AvgBineHeightCm', 'MaxBineHeightCm',
+  'GrowthStage', 'BinesOnString', 'AvgBineHeightCm', 'MaxBineHeightCm',
   'InternodeUnder1mCm', 'Internode1to2mCm', 'Internode2to3mCm', 'AvgLateralLengthCm',
   'SnappedTipsBine', 'SnappedTipsLateral', 'OverallBineHealth', 'LeafColour', 'LeafSize', 'LeafDamage',
   'Comments', 'OverviewPhoto', 'LeafPhoto1', 'LeafPhoto2', 'CheckID'
@@ -649,6 +677,7 @@ function plantExportRows_(filter) {
         if (h === 'InspectionDate') return d;
         if (h === 'WeekStarting') return weekStarting(d);
         if (h === 'Inspector') return nameOf_(names, c.InspectorEmail);
+        if (h === 'BinesOnString') return c.BinesTrained === undefined ? '' : c.BinesTrained; // stored as BinesTrained
         return c[h] === undefined ? '' : c[h];
       });
     });
