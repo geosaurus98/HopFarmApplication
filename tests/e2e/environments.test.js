@@ -34,7 +34,7 @@ test('live address uses the live server with no TEST bar; any other address is c
     assert.equal(await live.page.$('#envBanner'), null, 'no TEST bar on the live app');
     await live.context.close();
 
-    const branch = await openAs(browser, 'https://claude-gallant-davinci-z71yj9--peppy-pie-7f7463.netlify.app');
+    const branch = await openAs(browser, 'https://develop--peppy-pie-7f7463.netlify.app');
     assert.notEqual(await branch.page.inputValue('#apiUrl'), liveUrl, 'test app never defaults to the live server');
     const testUrl = /TEST_API_URL = '([^']*)'/.exec(config)[1];
     assert.ok(testUrl && testUrl !== liveUrl, 'a separate test server is configured');
