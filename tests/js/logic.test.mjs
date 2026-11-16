@@ -233,3 +233,15 @@ test('plant check: sections, edit rights, series and stage timeline', () => {
   assert.equal(rows.length, 3);
   assert.equal(rows[0][L.PLANT_EXPORT_HEADERS.indexOf('WeekStarting')], '2026-10-12');
 });
+
+test('waiting work: counts and the oldest waiting sample', () => {
+  const samples = [
+    { Status: 'Awaiting Analysis', CollectionDate: '2026-11-13' },
+    { Status: 'Awaiting Analysis', CollectionDate: '2026-11-16' },
+    { Status: 'Analysis In Progress', CollectionDate: '2026-11-10' },
+    { Status: 'Analysis Complete', CollectionDate: '2026-11-01' },
+  ];
+  assert.deepEqual(L.mitesWaiting(samples, '2026-11-16'), { awaiting: 2, inProgress: 1, oldestDays: 3 });
+  assert.deepEqual(L.mitesWaiting([], '2026-11-16'), { awaiting: 0, inProgress: 0, oldestDays: null });
+  assert.deepEqual([0, 1, 4].map(L.daysLabel), ['today', '1 day', '4 days']);
+});

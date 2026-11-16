@@ -348,3 +348,17 @@ table.timeline td:first-child, table.timeline th:first-child { text-align: left;
   .app-header .switch-person { margin-left: auto; min-height: 40px; }
   .app-header .sync-badge { min-height: 36px; }
 }
+
+/* ---------- Waiting work stands out ---------- */
+.tile.attention { background: #fff4dc; border: 3px solid #e59a00; }
+.tile.attention .tile-title { color: #6d3f00; font-weight: 800; }
+.tile.attention .tile-sub { color: #6d3f00; opacity: 1; font-weight: 700; }
+.tile.attention .tile-badge { background: #e59a00; color: #fff; font-size: 1.25rem; min-width: 2.6rem; padding: .2rem .7rem; }
+.tile.busy { background: var(--blue-bg); border: 3px solid var(--blue); }
+.tile.busy .tile-title { color: var(--blue); font-weight: 800; }
+.tile.busy .tile-sub { color: var(--blue); opacity: 1; font-weight: 700; }
+.tile.busy .tile-badge { background: var(--blue); color: #fff; font-size: 1.25rem; min-width: 2.6rem; padding: .2rem .7rem; }
+.alert-badge {
+  position: absolute; top: .9rem; right: 1rem; padding: .35rem .9rem; border-radius: 999px;
+  background: #f3b229; color: #2b1d00; font-weight: 800; font-size: 1.05rem; box-shadow: 0 2px 6px rgba(0,0,0,.2);
+}

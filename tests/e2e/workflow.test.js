@@ -136,7 +136,12 @@ test('shared tablet: collect offline, analyse leaf by leaf, complete, admin repo
 
     // ---- Office analysis: Lee taps his name ----
     await pickName('Lee Analyst');
+    // Waiting samples stand out: badge on home, amber Analyse tile.
+    assert.equal(await page.textContent('#mitesAlert'), '2 to analyse');
     await page.goto(`${url}/#/mites`);
+    assert.ok(await page.$('#analyseTile.attention'), 'Analyse Samples highlighted');
+    assert.match(await page.textContent('#analyseTile'), /2 waiting/);
+    assert.equal(await page.$('#progressTile.busy'), null);
     await page.click('text=Analyse Samples');
     await page.waitForSelector('.sample-card:has-text("1042")');
     await page.click('.sample-card:has-text("1042")');

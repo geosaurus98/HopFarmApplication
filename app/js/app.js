@@ -355,15 +355,22 @@ const tile = (href, title, sub, badge, cls = '', id = null) => h('a', { class: `
   h('span', { class: 'tile-title' }, title), sub ? h('span', { class: 'tile-sub' }, sub) : null,
   badge !== null && badge !== undefined ? h('span', { class: 'tile-badge' }, String(badge)) : null);
 
+/** Bold, coloured badge on the home screen's Mite Monitoring button when work is waiting. */
+const alertBadge = (text) => h('span', { class: 'alert-badge', id: 'mitesAlert' }, text);
+
 /** Home: one big button per section the person can use, then Help (and Manage Users for owners). */
 async function viewHome() {
   const mites = L.hasSection(session.user, 'Mites');
   const plants = L.hasSection(session.user, 'Plant Health');
   // Only one section: go straight to it.
   if (mites !== plants) return mites ? viewMites() : ctxPlantHome();
+  const w = L.mitesWaiting(await db.getAll('samples'));
+  const toDo = w.awaiting + w.inProgress;
+  const mitesTile = tile('#/mites', 'Mite Monitoring', 'Samples in the field, leaf analysis', null, 'section-tile mites', 'goMites');
+  if (toDo) mitesTile.append(alertBadge(`${toDo} to analyse`));
   mount(main(),
     h('div', { class: 'tiles two' },
-      tile('#/mites', 'Mite Monitoring', 'Samples in the field, leaf analysis', null, 'section-tile mites', 'goMites'),
+      mitesTile,
       tile('#/plant-health', 'Plant Health', 'Weekly bay checks', null, 'section-tile plants', 'goPlants')),
     h('div', { class: 'tiles two' },
       tile('#/help', 'Help and Reference', 'Identification photos and how-to'),
@@ -376,13 +383,19 @@ async function viewMites() {
   const count = (st) => samples.filter((s) => s.Status === st).length;
   const allCompleted = can(role(), 'viewAllCompleted');
   const myCompleted = samples.filter((s) => s.Status === STATUS.COMPLETE && (allCompleted || L.analysedBy(s, me()))).length;
+  // Make waiting work stand out: amber when samples need analysing, blue when analyses are under way.
+  const w = L.mitesWaiting(samples);
+  const analyseSub = w.awaiting
+    ? `${w.awaiting} waiting${w.oldestDays !== null ? ` · oldest collected ${w.oldestDays === 0 ? 'today' : `${L.daysLabel(w.oldestDays)} ago`}` : ''}`
+    : 'Nothing waiting';
+  const progressSub = w.inProgress ? `${w.inProgress} started, not finished` : 'Resume a paused analysis';
   mount(main(),
     h('div', { class: 'page-head' }, h('h1', {}, 'Mite Monitoring'), h('a', { class: 'btn secondary small', href: '#/help/mites' }, 'Help')),
     h('div', { class: 'tiles two' },
       tile('#/new', 'New Mite Sample', 'Record a sample bag in the field', null, 'primary'),
-      tile('#/samples/queue', 'Analyse Samples', 'Waiting for leaf analysis', count(STATUS.AWAITING))),
+      tile('#/samples/queue', 'Analyse Samples', analyseSub, count(STATUS.AWAITING), w.awaiting ? 'attention' : '', 'analyseTile')),
     h('div', { class: 'tiles two' },
-      tile('#/samples/progress', 'Samples In Progress', 'Resume a paused analysis', count(STATUS.IN_PROGRESS)),
+      tile('#/samples/progress', 'Samples In Progress', progressSub, count(STATUS.IN_PROGRESS), w.inProgress ? 'busy' : '', 'progressTile'),
       tile('#/samples/completed', allCompleted ? 'Completed Samples' : 'My Completed Samples',
         allCompleted ? 'Search historical results' : 'Analyses you completed', myCompleted)),
     can(role(), 'reports') ? h('div', { class: 'tiles two' },

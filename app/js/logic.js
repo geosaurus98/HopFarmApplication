@@ -598,3 +598,20 @@ export function canEditPlantCheck(user, check, now = Date.now()) {
   const t = new Date(check.CreatedAt || NaN).getTime();
   return !Number.isFinite(t) || now - t <= 31 * 86400000; // not yet uploaded = editable
 }
+
+/**
+ * Work waiting in the mite section: samples to analyse, analyses in progress, and how
+ * many days the oldest waiting sample has been waiting (from its collection date).
+ */
+export function mitesWaiting(samples, today = todayLocal()) {
+  const awaiting = samples.filter((s) => s.Status === STATUS.AWAITING);
+  const inProgress = samples.filter((s) => s.Status === STATUS.IN_PROGRESS).length;
+  const dates = awaiting.map((s) => s.CollectionDate).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d))).sort();
+  const oldestDays = dates.length
+    ? Math.max(0, Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${dates[0]}T00:00:00Z`)) / 86400000))
+    : null;
+  return { awaiting: awaiting.length, inProgress, oldestDays };
+}
+
+/** "today", "1 day", "3 days" */
+export const daysLabel = (n) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
