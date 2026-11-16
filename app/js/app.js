@@ -77,7 +77,7 @@ function renderHeader() {
   renderEnvBanner();
   const header = document.getElementById('header');
   mount(header,
-    h('a', { class: 'brand', href: '#/' }, h('img', { src: 'icons/icon.svg', alt: '' }), h('span', {}, 'Hop Farm')),
+    h('a', { class: 'brand', href: '#/' }, h('img', { src: 'icons/icon.svg', alt: '' }), h('span', {}, 'Nelson Lakes Hops')),
     h('div', { class: 'spacer' }),
     session ? h('span', { class: 'who' }, `${displayName(session.user)} · ${L.normalizeRole(session.user.Role)}`) : null,
     session ? h('a', { class: 'switch-person', href: '#/switch', id: 'switchPerson' }, 'Change person') : null,

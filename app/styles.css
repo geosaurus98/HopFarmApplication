@@ -329,3 +329,22 @@ table.timeline td:first-child, table.timeline th:first-child { text-align: left;
 @media (max-width: 560px) { .count-grid { grid-template-columns: 1fr; } }
 
 .collect-steps { text-align: left; max-width: 520px; margin: 1rem auto; font-size: 1.2rem; line-height: 1.6; }
+
+/* App name on one line; tighter header on phones. */
+.brand span { white-space: nowrap; }
+.switch-person, .sync-badge { white-space: nowrap; }
+@media (max-width: 560px) {
+  .app-header { gap: .5rem; padding-left: .75rem; padding-right: .75rem; }
+  .brand { font-size: 1rem; gap: .35rem; }
+  .brand img { width: 28px; height: 28px; }
+  .switch-person { font-size: .8rem; }
+  .sync-badge { font-size: .8rem; padding: .25rem .6rem; }
+}
+@media (max-width: 560px) {
+  /* Two rows on phones: the app name, then Change person + sync status. */
+  .app-header { flex-wrap: wrap; row-gap: 0; }
+  .app-header .brand { flex: 1 0 100%; min-height: 36px; }
+  .app-header .spacer { display: none; }
+  .app-header .switch-person { margin-left: auto; min-height: 40px; }
+  .app-header .sync-badge { min-height: 36px; }
+}

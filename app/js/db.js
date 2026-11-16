@@ -35,7 +35,7 @@ export function openDB() {
       };
       r.onsuccess = () => resolve(r.result);
       r.onerror = () => reject(r.error);
-      r.onblocked = () => reject(new Error('Close other Hop Farm tabs and reload.'));
+      r.onblocked = () => reject(new Error('Close other Nelson Lakes Hops tabs and reload.'));
     });
   }
   return dbPromise;

@@ -1,7 +1,7 @@
 {
-  "name": "Hop Farm — Mite Monitoring",
-  "short_name": "Hop Farm",
-  "description": "Mite sample collection and leaf analysis for Nelson Lakes Hops. Works offline.",
+  "name": "Nelson Lakes Hops",
+  "short_name": "Nelson Lakes Hops",
+  "description": "Mite monitoring and plant health checks for Nelson Lakes Hops. Works offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
