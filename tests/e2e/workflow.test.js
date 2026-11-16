@@ -55,10 +55,14 @@ test('shared tablet: collect offline, analyse leaf by leaf, complete, admin repo
     // ---- First use: an owner sets the tablet up ----
     await page.goto(url);
     await page.waitForSelector('#login');
-    assert.equal(await page.inputValue('#apiUrl'), '', 'test app does not default to the live server');
+    // A test address fills in the TEST server, never the live one.
+    const config = fs.readFileSync(require('path').join(__dirname, '..', '..', 'app', 'js', 'config.js'), 'utf8');
+    assert.equal(await page.inputValue('#apiUrl'), /TEST_API_URL = '([^']*)'/.exec(config)[1]);
+    assert.notEqual(await page.inputValue('#apiUrl'), /LIVE_API_URL = '([^']*)'/.exec(config)[1]);
     await page.fill('#login', 'ana');
     await page.fill('#code', '999999');
-    await page.fill('#apiUrl', '/api');
+    if (!(await page.isVisible('#apiUrl'))) await page.click('summary:has-text("Server address")');
+    await page.fill('#apiUrl', '/api'); // the local stand-in server
     await page.click('button:has-text("Sign in")');
     await page.waitForSelector('text=not recognised');
     await page.fill('#code', '111111');

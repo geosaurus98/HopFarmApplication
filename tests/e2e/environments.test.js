@@ -36,6 +36,9 @@ test('live address uses the live server with no TEST bar; any other address is c
 
     const branch = await openAs(browser, 'https://claude-gallant-davinci-z71yj9--peppy-pie-7f7463.netlify.app');
     assert.notEqual(await branch.page.inputValue('#apiUrl'), liveUrl, 'test app never defaults to the live server');
+    const testUrl = /TEST_API_URL = '([^']*)'/.exec(config)[1];
+    assert.ok(testUrl && testUrl !== liveUrl, 'a separate test server is configured');
+    assert.equal(await branch.page.inputValue('#apiUrl'), testUrl, 'test app defaults to the test server');
     assert.match(await branch.page.textContent('#envBanner'), /TEST VERSION/);
     await branch.context.close();
   } finally {

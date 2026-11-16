@@ -47,7 +47,7 @@ you can change people's access codes, so the test codes differ from the real one
    *TEST server* and list only the TEST sheets.
 4. **Extensions → Apps Script → Deploy → New deployment → Web app**. Set
    *Execute as: Me* and *Who has access: Anyone*. Copy the `/exec` address. This
-   is the **test server address**; send it to me so it becomes the test app's
+   is the **test server address**. It is set as the test app's
    default.
 
 Also run **Show which sheets this script uses** in the live **Hop Farm Data**.
