@@ -16,9 +16,17 @@ export const LIVE_API_URL = 'https://script.google.com/macros/s/AKfycbxMkGICFRtK
 /** Test server: the deployment attached to the TEST copy of Hop Farm Data. Paste it here once it exists. */
 export const TEST_API_URL = 'https://script.google.com/macros/s/AKfycbx6ojOrv1lPdKdeVw7OCHY40o1dKSNzBeWqSHyfBH6NXWET0BPxNMhxtZYR6QUhqX7FQw/exec';
 
+/**
+ * Server addresses that have been replaced. A tablet still set up with one of these
+ * is moved to the current server when the app starts.
+ */
+export const PREVIOUS_API_URLS = [
+  'https://script.google.com/macros/s/AKfycbwkXZ17Ys7zf23x1uBdeAzZ7BaeWToQtLFm_Ywdac_A1MEtvXP3ZEwfLgJ_k-9pu0tb/exec',
+];
+
 export const IS_LIVE_APP = typeof location !== 'undefined' && LIVE_HOSTS.includes(location.hostname);
 
 /** Default server address shown on the sign-in screen (people can still type another). */
 export const DEFAULT_API_URL = IS_LIVE_APP ? LIVE_API_URL : TEST_API_URL;
 
-export const APP_VERSION = '1.5.2';
+export const APP_VERSION = '1.5.3';

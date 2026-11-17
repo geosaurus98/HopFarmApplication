@@ -3,7 +3,7 @@ import * as L from './logic.js';
 import { STATUS, COUNT_FIELDS, can } from './logic.js';
 import { api, sync, syncSoon, onStatus, refreshCounts, startAutoSync, fetchLeaves, AuthError, OfflineError, getStatus } from './sync.js';
 import { h, svg, mount, toast, confirmDialog, choiceDialog, contentDialog, fmtDate, fmtDateTime, fmtAgo, pct, download, field, statusPill, progressBar, clearErrorsOnEdit } from './ui.js';
-import { DEFAULT_API_URL, APP_VERSION, IS_LIVE_APP, LIVE_API_URL } from './config.js';
+import { DEFAULT_API_URL, APP_VERSION, IS_LIVE_APP, LIVE_API_URL, PREVIOUS_API_URLS } from './config.js';
 import { initPlant, plantRoutes } from './plant.js';
 import { MITE_HELP, PLANT_HELP, sheetHelp, helpSection } from './help.js';
 
@@ -37,6 +37,7 @@ async function boot() {
   // Ask the browser not to evict our data under storage pressure.
   navigator.storage?.persist?.().catch(() => {});
 
+  await moveOffOldServer();
   session = await db.getMeta('session');
   if (session) db.setActor(session.user.UserEmail);
   renderHeader();
@@ -49,6 +50,40 @@ async function boot() {
     runSync();
   }
 }
+
+/**
+ * When a server address is replaced (a new Apps Script deployment), tablets set up
+ * with the old one would be stuck: the tablet's key belongs to the old server.
+ * Forget that setup so an admin can sign in again on the current server.
+ */
+async function moveOffOldServer() {
+  const old = (u) => PREVIOUS_API_URLS.includes(u);
+  const device = await db.getMeta('device');
+  if (device && old(device.apiUrl)) await db.setMeta('device', null);
+  const last = await db.getMeta('lastLogin');
+  if (last && old(last.apiUrl)) await db.setMeta('lastLogin', { ...last, apiUrl: DEFAULT_API_URL });
+  const s = await db.getMeta('session');
+  if (s && old(s.apiUrl)) {
+    // Code sign-ins carry on with the new server; tablet sign-ins need the tablet set up again.
+    await db.setMeta('session', s.code ? { ...s, apiUrl: DEFAULT_API_URL } : null);
+  }
+}
+
+/** Forget this tablet's worker setup (from the sign-in screen), e.g. to use another server. */
+async function forgetTabletSetup() {
+  const pending = await db.count('outbox');
+  const ok = await confirmDialog('Set this tablet up again?',
+    (pending ? `This tablet has ${pending} change(s) waiting to upload. They stay on the tablet and upload after the next sign-in. ` : '') +
+    'Then sign in with your code: check the server address and tick the box to let workers pick their name again.', { ok: 'Set up again' });
+  if (!ok) return;
+  await db.setMeta('device', null);
+  const last = await db.getMeta('lastLogin');
+  if (last) await db.setMeta('lastLogin', { ...last, apiUrl: DEFAULT_API_URL });
+  showServerField = true;
+  mount(main());
+  render();
+}
+let showServerField = false;
 
 /**
  * Make it obvious when this is not the workers' live app, and warn loudly if a
@@ -326,7 +361,7 @@ async function viewCodeLogin() {
       await sync();
       go('#/');
     } catch (err) {
-      msg.textContent = err instanceof OfflineError ? 'You need an internet connection to sign in the first time.' : err.message;
+      msg.textContent = err instanceof OfflineError && !navigator.onLine ? 'You need an internet connection to sign in the first time.' : err.message;
       btn.disabled = false;
       btn.textContent = 'Sign in';
     }
@@ -342,9 +377,10 @@ async function viewCodeLogin() {
         h('label', { class: 'check-row', for: 'sharedTablet' }, shared, h('span', {}, 'Set up this tablet so workers can just tap their name')),
         h('div', { class: 'hint' }, 'Admins and owners only. Workers then don’t need a code on this tablet.'),
         field('Tablet name', tabletName, { hint: 'So you can tell your tablets apart, e.g. "Field tablet 1".' })),
-      h('details', { open: !apiUrl.value },
+      h('details', { open: !apiUrl.value || showServerField },
         h('summary', {}, 'Server address'),
-        field('Server address', apiUrl, { hint: 'The Google Apps Script web app address ending in /exec.' })),
+        field('Server address', apiUrl, { hint: device ? 'Set when this tablet was set up.' : 'The Google Apps Script web app address ending in /exec.' }),
+        device ? h('button', { type: 'button', class: 'btn secondary small', id: 'resetTablet', onclick: forgetTabletSetup }, 'Use a different server (set this tablet up again)') : null),
       msg,
       h('div', { class: 'row end' }, device ? h('a', { class: 'btn secondary', href: '#/login' }, 'Back') : null, btn)));
 }

@@ -45,3 +45,41 @@ test('live address uses the live server with no TEST bar; any other address is c
     await browser.close();
   }
 });
+
+test('a tablet set up with a replaced server address is not stuck', async () => {
+  const config = fs.readFileSync(path.join(APP_DIR, 'js', 'config.js'), 'utf8');
+  const testUrl = /TEST_API_URL = '([^']*)'/.exec(config)[1];
+  const oldUrl = /PREVIOUS_API_URLS = \[\s*'([^']+)'/.exec(config)[1];
+  const browser = await chromium.launch();
+  try {
+    const { context, page } = await openAs(browser, 'https://develop--peppy-pie-7f7463.netlify.app');
+    const setDevice = (url) => page.evaluate(async (u) => {
+      const db = await import('./js/db.js');
+      await db.setMeta('device', { id: 'dev-1', token: 't', apiUrl: u, environment: 'TEST' });
+      await db.setMeta('lastLogin', { apiUrl: u, login: 'ana' });
+    }, url);
+
+    // Set up with the old address: moved to the current server on start.
+    await setDevice(oldUrl);
+    await page.goto('https://develop--peppy-pie-7f7463.netlify.app/#/login/code');
+    await page.waitForSelector('#login');
+    assert.equal(await page.isEnabled('#apiUrl'), true, 'old tablet setup forgotten');
+    assert.equal(await page.inputValue('#apiUrl'), testUrl);
+
+    // Set up with another address: the admin can choose to set the tablet up again.
+    await setDevice('https://example.invalid/exec');
+    await page.reload();
+    await page.goto('https://develop--peppy-pie-7f7463.netlify.app/#/login/code');
+    await page.waitForSelector('#login');
+    assert.equal(await page.isEnabled('#apiUrl'), false);
+    await page.click('summary:has-text("Server address")');
+    await page.click('#resetTablet');
+    await page.click('dialog button:has-text("Set up again")');
+    await page.waitForSelector('#apiUrl:enabled');
+    assert.equal(await page.inputValue('#apiUrl'), testUrl, 'current server filled in');
+    assert.ok(await page.isVisible('#sharedTablet'), 'can set the tablet up again');
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+});
