@@ -253,6 +253,9 @@ test('shared tablet: collect offline, analyse leaf by leaf, complete, admin repo
 
     // Cole (who didn't analyse it) doesn't see it among his completed samples.
     await pickName('Cole Collector');
+    assert.equal(await page.$('#attentionTile'), null, 'Users have no Needs Attention button');
+    await page.goto(`${url}/#/attention`);
+    await page.waitForSelector('text=This screen is for admins and owners.');
     await page.goto(`${url}/#/samples/completed`);
     await page.waitForSelector('text=No samples match.');
 
@@ -275,6 +278,27 @@ test('shared tablet: collect offline, analyse leaf by leaf, complete, admin repo
     assert.match(dl2.suggestedFilename(), /tablet/);
     await context.setOffline(false);
     assert.equal(await page.isVisible('text=Manage Users'), false);
+
+    // ---- Needs attention: data checks and backups, most urgent first ----
+    await page.goto(`${url}/#/`);
+    await page.waitForSelector('#attentionTile');
+    await page.click('#attentionTile');
+    await page.waitForSelector('#attnBackup:has-text("No backup has been made yet")');
+    assert.match(await page.textContent('#attnBackup h2'), /Backup needs attention/);
+    assert.match(await page.textContent('#attnBackup'), /Turn on weekly backup/);
+    await page.waitForSelector('.attention-group.sev-info:has-text("Completed below target")');
+    await shot('06-attention');
+    // The home button now shows the count (backup not set up).
+    await page.goto(`${url}/#/`);
+    await page.waitForSelector('#attentionTile.attention #attentionCount');
+    assert.equal(await page.textContent('#attentionCount'), '1');
+    // Fix: backup turned on and run; Check again clears it.
+    g.gs.enableWeeklyBackup_(); g.gs.runBackup_();
+    await page.goto(`${url}/#/attention`);
+    await page.click('#attentionRefresh');
+    await page.waitForSelector('#attnBackup:has-text("Backup OK")');
+    await page.click('.attention-group.sev-info a.attn-link');
+    await page.waitForSelector('button:has-text("Reopen analysis")');
 
     // ---- Owner: people and tablets ----
     await codeSignIn('ana', '111111');

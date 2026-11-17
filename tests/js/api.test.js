@@ -337,7 +337,7 @@ test('duplicate leaf numbers from two offline devices are kept and reported', ()
   assert.equal(g.table('LeafAnalysis').length, 2);
   g.gs.buildDataQualityReport();
   const issues = g.table('Report_DataQuality').map((r) => r.Issue);
-  assert.ok(issues.some((i) => /Duplicate leaf number/.test(i)), issues.join('\n'));
+  assert.ok(issues.some((i) => /recorded twice/.test(i)), issues.join('\n'));
 });
 
 test('data quality report and spreadsheet menu exports', () => {
@@ -753,4 +753,65 @@ test('Users reopen only samples they analysed, within 31 days; admins any time',
   assert.equal(r.results[0].ok, true, r.results[0].error);
   r = push(g, BEA, [{ table: 'Samples', id: 'sample-0001', patch: { Status: 'Analysis In Progress' } }]);
   assert.equal(r.results[0].ok, true, 'admins can reopen any sample');
+});
+
+test('weekly backup: saves an Excel copy of each sheet, keeps the last 12, reports status', () => {
+  const g = createSeededGas({ split: true });
+  g.ss.name = 'Hop Farm Data'; g.setup.name = 'Users & Setup'; g.plant.name = 'Plant Health';
+  let st = g.gs.backupStatus_();
+  assert.equal(st.enabled, false);
+  assert.equal(st.overdue, true, 'never backed up');
+
+  assert.match(g.gs.enableWeeklyBackup_(), /every Sunday/);
+  g.gs.enableWeeklyBackup_(); // twice: still one schedule
+  assert.equal(g.triggers.length, 1);
+  assert.equal(g.triggers[0].handler, 'runWeeklyBackup');
+
+  const msg = g.gs.runBackup_();
+  assert.match(msg, /Hop Farm Data – backup \d{4}-\d{2}-\d{2}\.xlsx/);
+  assert.equal(g.fetched.length, 3);
+  assert.ok(g.fetched.every((u) => /export\?format=xlsx$/.test(u)));
+  const folder = g.driveRoot.children.find((f) => f.name === 'Hop Farm Backups');
+  assert.equal(folder.files.length, 3);
+  st = g.gs.backupStatus_();
+  assert.equal(st.enabled, true);
+  assert.equal(st.overdue, false);
+  assert.equal(st.last.ok, true);
+
+  // 13 more weeks: each sheet keeps only its newest 12
+  for (let w = 1; w <= 13; w++) { g.clock.offset = w * 7 * 86400000; g.gs.runWeeklyBackup(); }
+  const live = folder.files.filter((f) => !f.trashed);
+  assert.equal(live.length, 36);
+  for (const name of ['Hop Farm Data', 'Users & Setup', 'Plant Health']) {
+    const mine = folder.files.filter((f) => f.name.startsWith(name + ' –'));
+    assert.equal(mine.filter((f) => !f.trashed).length, 12, name);
+    assert.ok(mine.filter((f) => f.trashed).every((f) => f.created <= mine.filter((x) => !x.trashed)[0].created), 'oldest are binned');
+  }
+
+  // a backup older than 8 days counts as overdue; turning it off is reported
+  g.props.LAST_BACKUP = JSON.stringify({ at: new Date(Date.now() - 9 * 86400000).toISOString(), ok: true });
+  assert.equal(g.gs.backupStatus_().overdue, true);
+  assert.match(g.gs.disableWeeklyBackup_(), /off/);
+  assert.equal(g.triggers.length, 0);
+});
+
+test('backup failure is recorded and shown as needing attention', () => {
+  const g = createSeededGas({ split: true });
+  delete g.books[g.plant.getId()]; // export fails for this one
+  assert.throws(() => g.gs.runBackup_(), /Could not export/);
+  const st = g.gs.backupStatus_();
+  assert.equal(st.last.ok, false);
+  assert.equal(st.overdue, true);
+});
+
+test('attention: admins get the issue list with sample links and backup status; users cannot', () => {
+  const g = createSeededGas();
+  push(g, COL, [newSample('sample-0001', { CollectionDate: '2026-01-02' })]);
+  const r = g.post({ action: 'attention', login: 'bea', code: '555000' });
+  assert.equal(r.ok, true, r.error);
+  const waiting = r.issues.find((i) => /Waiting for analysis for \d+ days/.test(i.issue));
+  assert.ok(waiting, JSON.stringify(r.issues));
+  assert.equal(waiting.sampleId, 'sample-0001');
+  assert.equal(r.backup.enabled, false);
+  assert.equal(g.post({ action: 'attention', ...COL }).ok, false);
 });

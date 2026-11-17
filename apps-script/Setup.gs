@@ -173,6 +173,7 @@ const BENEFICIAL_FIELDS = ['LadybirdStethorusCount', 'LadybirdOtherCount', 'Lace
 
 const HIGH_COUNT_THRESHOLD = 100;   // per-leaf count that is flagged for review
 const STALE_ANALYSIS_DAYS = 7;      // "In Progress" longer than this is flagged
+const AWAITING_ALERT_DAYS = 3;      // waiting for analysis longer than this is flagged
 
 // ---------------------------------------------------------------------------
 // Calculations — identical to app/js/logic.js and tools/leaf_target.py
@@ -219,6 +220,10 @@ function onOpen() {
     .addItem('Build leaf results export (one row per leaf)', 'buildLeafExport')
     .addItem('Build sample summary (one row per sample)', 'buildSampleSummary')
     .addItem('Run data quality report', 'buildDataQualityReport')
+    .addSeparator()
+    .addItem('Back up now', 'backUpNow')
+    .addItem('Turn on weekly backup', 'enableWeeklyBackup')
+    .addItem('Turn off weekly backup', 'disableWeeklyBackup')
     .addSeparator()
     .addItem('Repair / extend workbook structure', 'setupHopFarmWorkbook')
     .addItem('Build plant checks export', 'buildPlantExport')
@@ -735,14 +740,27 @@ function buildDataQualityReport() {
     dataQualityIssues_()).activate();
 }
 
+/** For the sheet report: [Severity, Table, RowID, Record, Issue] rows. */
 function dataQualityIssues_() {
+  return dataQualityList_().map(o => [o.severity, o.table, o.rowId, o.record, o.issue]);
+}
+
+/**
+ * Everything worth an admin's attention, most serious first:
+ * { severity: ERROR|WARN|INFO, table, rowId, record, issue, sampleId }.
+ * sampleId links the issue to a sample in the app where there is one.
+ */
+function dataQualityList_() {
   const samples = readTable_('Samples');
   const leaves = liveLeaves_();
   const blocks = readTable_('BlockVarieties');
   const leavesBySample = groupBy_(leaves, 'SampleID');
   const sampleIds = new Set(samples.map(s => s.SampleID));
+  const sampleById = samples.reduce((m, s) => { m[s.SampleID] = s; return m; }, {});
   const issues = [];
-  const add = (sev, table, id, label, issue) => issues.push([sev, table, id, label, issue]);
+  const add = (sev, table, id, label, issue, sampleId) => issues.push({
+    severity: sev, table: table, rowId: id, record: label, issue: issue, sampleId: sampleId || ''
+  });
   const now = new Date();
 
   const usernames = {};
@@ -763,46 +781,52 @@ function dataQualityIssues_() {
     const label = 'Bag ' + s.SampleNumber + ' · ' + s.Block + ' - ' + s.Variety;
     const n = (leavesBySample[s.SampleID] || []).length;
     ['SampleNumber', 'CollectionDate', 'CollectorEmail', 'BlockVarietyID', 'TargetLeafCount', 'Status']
-      .forEach(f => { if (s[f] === '' || s[f] === null) add('ERROR', 'Samples', s.SampleID, label, f + ' is blank'); });
+      .forEach(f => { if (s[f] === '' || s[f] === null) add('ERROR', 'Samples', s.SampleID, label, f + ' is blank', s.SampleID); });
     if (s.TargetLeafCount !== '' && Number(s.TargetLeafCount) !== requiredLeaves(s.AreaHaAtCollection)) {
-      add('WARN', 'Samples', s.SampleID, label, 'TargetLeafCount does not match AreaHaAtCollection');
+      add('WARN', 'Samples', s.SampleID, label, 'TargetLeafCount does not match AreaHaAtCollection', s.SampleID);
     }
-    if (s.Status === STATUS.COMPLETE && n === 0) add('ERROR', 'Samples', s.SampleID, label, 'Marked complete with no leaf records');
+    if (s.Status === STATUS.COMPLETE && n === 0) add('ERROR', 'Samples', s.SampleID, label, 'Marked complete with no leaf records', s.SampleID);
     if (s.Status === STATUS.COMPLETE && s.ActualLeafCount !== '' && Number(s.ActualLeafCount) !== n) {
-      add('WARN', 'Samples', s.SampleID, label, 'ActualLeafCount (' + s.ActualLeafCount + ') differs from leaf records (' + n + ') — leaves edited after completion?');
+      add('WARN', 'Samples', s.SampleID, label, 'ActualLeafCount (' + s.ActualLeafCount + ') differs from leaf records (' + n + ') — leaves edited after completion?', s.SampleID);
     }
     if (s.Status === STATUS.COMPLETE && n < Number(s.TargetLeafCount)) {
-      add('INFO', 'Samples', s.SampleID, label, 'Completed below target (' + n + ' of ' + s.TargetLeafCount + ')' + (s.EarlyCompletionReason ? ' — ' + s.EarlyCompletionReason : ' — no reason given'));
+      add('INFO', 'Samples', s.SampleID, label, 'Completed below target (' + n + ' of ' + s.TargetLeafCount + ')' + (s.EarlyCompletionReason ? ' — ' + s.EarlyCompletionReason : ' — no reason given'), s.SampleID);
     }
     if (s.Status === STATUS.IN_PROGRESS && s.AnalysisStartedAt &&
         (now - new Date(s.AnalysisStartedAt)) / 86400000 > STALE_ANALYSIS_DAYS) {
-      add('WARN', 'Samples', s.SampleID, label, 'Analysis in progress for more than ' + STALE_ANALYSIS_DAYS + ' days');
+      add('WARN', 'Samples', s.SampleID, label, 'Analysis in progress for more than ' + STALE_ANALYSIS_DAYS + ' days', s.SampleID);
     }
-    if (s.Status === STATUS.AWAITING && n > 0) add('WARN', 'Samples', s.SampleID, label, 'Has leaf records but status is still Awaiting Analysis');
+    if (s.Status === STATUS.AWAITING && s.CollectionDate instanceof Date) {
+      const days = Math.floor((now - s.CollectionDate) / 86400000);
+      if (days > AWAITING_ALERT_DAYS) add('WARN', 'Samples', s.SampleID, label, 'Waiting for analysis for ' + days + ' days', s.SampleID);
+    }
+    if (s.Status === STATUS.AWAITING && n > 0) add('WARN', 'Samples', s.SampleID, label, 'Has leaf records but status is still Awaiting Analysis', s.SampleID);
     if (s.Status !== STATUS.CANCELLED) {
       const key = s.Season + '|' + s.SampleNumber;
-      if (seen[key]) add('WARN', 'Samples', s.SampleID, label, 'Bag number also used by sample ' + seen[key] + ' in season ' + s.Season);
+      if (seen[key]) add('WARN', 'Samples', s.SampleID, label, 'Bag number also used by another sample in season ' + s.Season, s.SampleID);
       else seen[key] = s.SampleID;
     }
   });
 
   const leafKeys = {};
   leaves.forEach(l => {
-    const label = 'Sample ' + l.SampleID + ' · Leaf ' + l.LeafNumber;
+    const owner = sampleById[l.SampleID];
+    const label = (owner ? 'Bag ' + owner.SampleNumber + ' · ' + owner.Block + ' - ' + owner.Variety : 'Sample ' + l.SampleID) + ' · Leaf ' + l.LeafNumber;
+    const sid = owner ? l.SampleID : '';
     if (!sampleIds.has(l.SampleID)) add('ERROR', 'LeafAnalysis', l.LeafAnalysisID, label, 'Leaf belongs to a sample that does not exist');
     const key = l.SampleID + '|' + l.LeafNumber;
-    if (leafKeys[key]) add('ERROR', 'LeafAnalysis', l.LeafAnalysisID, label, 'Duplicate leaf number within sample (also ' + leafKeys[key] + ')');
+    if (leafKeys[key]) add('ERROR', 'LeafAnalysis', l.LeafAnalysisID, label, 'Leaf number ' + l.LeafNumber + ' recorded twice in this sample (two tablets?)', sid);
     else leafKeys[key] = l.LeafAnalysisID;
     COUNT_FIELDS.forEach(c => {
       const v = l[c];
-      if (v === '' || v === null) add('ERROR', 'LeafAnalysis', l.LeafAnalysisID, label, c + ' is blank');
-      else if (Number(v) < 0 || Number(v) !== Math.floor(Number(v))) add('ERROR', 'LeafAnalysis', l.LeafAnalysisID, label, c + ' is not a non-negative whole number');
-      else if (Number(v) > HIGH_COUNT_THRESHOLD) add('INFO', 'LeafAnalysis', l.LeafAnalysisID, label, c + ' is unusually high (' + v + ')');
+      if (v === '' || v === null) add('ERROR', 'LeafAnalysis', l.LeafAnalysisID, label, c + ' is blank', sid);
+      else if (Number(v) < 0 || Number(v) !== Math.floor(Number(v))) add('ERROR', 'LeafAnalysis', l.LeafAnalysisID, label, c + ' is not a non-negative whole number', sid);
+      else if (Number(v) > HIGH_COUNT_THRESHOLD) add('INFO', 'LeafAnalysis', l.LeafAnalysisID, label, c + ' is unusually high (' + v + ')', sid);
     });
   });
 
   const order = { ERROR: 0, WARN: 1, INFO: 2 };
-  issues.sort((a, b) => order[a[0]] - order[b[0]]);
+  issues.sort((a, b) => order[a.severity] - order[b.severity]);
   return issues;
 }
 
@@ -1010,4 +1034,130 @@ function connectionsSummary_() {
 
 function showConnections() {
   SpreadsheetApp.getUi().alert('Hop Farm sheets', connectionsSummary_(), SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+// ---------------------------------------------------------------------------
+// Weekly backup
+// Every week (Sunday ~2am), an Excel copy of each Hop Farm spreadsheet (this one,
+// Users & Setup and Plant Health when connected) is saved in the Drive folder
+// "Hop Farm Backups". The last BACKUP_KEEP copies of each are kept; older ones go
+// to the Drive bin (recoverable for 30 days). Excel copies carry no script, so a
+// backup can never act as a server, and they open straight in Excel.
+// ---------------------------------------------------------------------------
+const BACKUP_FOLDER_NAME = 'Hop Farm Backups';
+const BACKUP_KEEP = 12;
+const BACKUP_PROP = 'LAST_BACKUP';
+const BACKUP_FOLDER_PROP = 'BACKUP_FOLDER_ID';
+const BACKUP_HANDLER = 'runWeeklyBackup';
+const BACKUP_OVERDUE_DAYS = 8;
+
+function backupBooks_() {
+  return [SpreadsheetApp.getActive(), setupSs_(), linkedSs_('plant')].filter(Boolean);
+}
+
+function backupFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty(BACKUP_FOLDER_PROP);
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (e) { /* recreated below */ }
+  }
+  const it = DriveApp.getFoldersByName(BACKUP_FOLDER_NAME);
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER_NAME);
+  props.setProperty(BACKUP_FOLDER_PROP, folder.getId());
+  return folder;
+}
+
+/** Saves the backups and returns a short summary. Records the result for the app. */
+function runBackup_() {
+  const props = PropertiesService.getScriptProperties();
+  const now = new Date();
+  try {
+    const folder = backupFolder_();
+    const stamp = Utilities.formatDate(now, tz_(), 'yyyy-MM-dd');
+    const token = ScriptApp.getOAuthToken();
+    const saved = backupBooks_().map(book => {
+      const res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + book.getId() + '/export?format=xlsx',
+        { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+      if (res.getResponseCode() !== 200) throw new Error('Could not export "' + book.getName() + '" (HTTP ' + res.getResponseCode() + ').');
+      const name = book.getName() + ' – backup ' + stamp + '.xlsx';
+      folder.createFile(res.getBlob().setName(name));
+      return name;
+    });
+    const removed = pruneBackups_(folder);
+    props.setProperty(BACKUP_PROP, JSON.stringify({ at: now.toISOString(), ok: true, files: saved.length }));
+    return 'Saved in Drive → ' + BACKUP_FOLDER_NAME + ':\n• ' + saved.join('\n• ') +
+      (removed ? '\n\n' + removed + ' older backup' + (removed === 1 ? '' : 's') + ' moved to the bin (kept: last ' + BACKUP_KEEP + ').' : '');
+  } catch (e) {
+    props.setProperty(BACKUP_PROP, JSON.stringify({ at: now.toISOString(), ok: false, error: String(e.message || e) }));
+    throw e;
+  }
+}
+
+/** Keeps the newest BACKUP_KEEP backups of each spreadsheet; returns how many were binned. */
+function pruneBackups_(folder) {
+  const groups = {};
+  const it = folder.getFiles();
+  while (it.hasNext()) {
+    const f = it.next();
+    const m = /^(.*) – backup \d{4}-\d{2}-\d{2}/.exec(f.getName());
+    if (!m) continue;
+    (groups[m[1]] = groups[m[1]] || []).push(f);
+  }
+  let removed = 0;
+  Object.keys(groups).forEach(k => {
+    groups[k].sort((a, b) => b.getDateCreated() - a.getDateCreated())
+      .slice(BACKUP_KEEP).forEach(f => { f.setTrashed(true); removed++; });
+  });
+  return removed;
+}
+
+/** Called by the weekly trigger. */
+function runWeeklyBackup() { runBackup_(); }
+
+function backUpNow() {
+  const ui = SpreadsheetApp.getUi();
+  try { ui.alert('Backup done', runBackup_(), ui.ButtonSet.OK); } catch (e) { ui.alert('Backup failed', e.message, ui.ButtonSet.OK); }
+}
+
+function backupTriggers_() {
+  return ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === BACKUP_HANDLER);
+}
+
+function enableWeeklyBackup_() {
+  backupTriggers_().forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger(BACKUP_HANDLER).timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(2).create();
+  return 'Weekly backup is on: every Sunday around 2am, into Drive → ' + BACKUP_FOLDER_NAME + '. The last ' + BACKUP_KEEP + ' weeks are kept.';
+}
+
+function disableWeeklyBackup_() {
+  const n = backupTriggers_().length;
+  backupTriggers_().forEach(t => ScriptApp.deleteTrigger(t));
+  return n ? 'Weekly backup is off. Existing backups are kept.' : 'Weekly backup was not on.';
+}
+
+function enableWeeklyBackup() {
+  const ui = SpreadsheetApp.getUi();
+  let msg = enableWeeklyBackup_();
+  try { msg += '\n\nA first backup has been made now:\n' + runBackup_(); } catch (e) { msg += '\n\nThe first backup failed: ' + e.message; }
+  ui.alert('Weekly backup', msg, ui.ButtonSet.OK);
+}
+
+function disableWeeklyBackup() {
+  SpreadsheetApp.getUi().alert('Weekly backup', disableWeeklyBackup_(), SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/** For the app's Needs attention screen. */
+function backupStatus_() {
+  let last = null;
+  try { last = JSON.parse(PropertiesService.getScriptProperties().getProperty(BACKUP_PROP) || 'null'); } catch (e) { last = null; }
+  let enabled = false;
+  try { enabled = backupTriggers_().length > 0; } catch (e) { /* not yet authorised: run "Turn on weekly backup" in the sheet */ }
+  const ageDays = last && last.ok ? (Date.now() - new Date(last.at).getTime()) / 86400000 : null;
+  return {
+    enabled: enabled,
+    last: last,
+    overdue: !enabled || !last || !last.ok || ageDays > BACKUP_OVERDUE_DAYS,
+    folder: BACKUP_FOLDER_NAME,
+    keep: BACKUP_KEEP
+  };
 }

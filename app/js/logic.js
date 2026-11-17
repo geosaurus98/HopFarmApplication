@@ -615,3 +615,36 @@ export function mitesWaiting(samples, today = todayLocal()) {
 
 /** "today", "1 day", "3 days" */
 export const daysLabel = (n) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
+
+// ---------------------------------------------------------------------------
+// Needs attention (admins and owners)
+// ---------------------------------------------------------------------------
+export const ATTENTION_LEVELS = [
+  { key: 'ERROR', title: 'Fix these', note: 'Wrong or missing data that will spoil reports.' },
+  { key: 'WARN', title: 'Check these', note: 'Probably fine, but worth a look.' },
+  { key: 'INFO', title: 'For information', note: 'Nothing to fix; shown so nothing is hidden.' },
+];
+
+/**
+ * Turns the server's list, the backup status and this tablet's upload queue into
+ * the groups shown on the Needs attention screen. `count` (for the home badge)
+ * leaves out information-only items.
+ */
+export function attentionSummary({ issues = [], backup = null, failedUploads = 0 } = {}) {
+  const groups = ATTENTION_LEVELS.map((lvl) => ({ ...lvl, items: issues.filter((i) => i.severity === lvl.key) }))
+    .filter((g) => g.items.length);
+  const backupProblem = !!(backup && backup.overdue);
+  const count = issues.filter((i) => i.severity !== 'INFO').length + (backupProblem ? 1 : 0) + (failedUploads ? 1 : 0);
+  return { groups, count, backupProblem };
+}
+
+/** One line describing the backup state. */
+export function backupText(backup, now = Date.now()) {
+  if (!backup) return 'Backup status unknown.';
+  const last = backup.last;
+  const days = last ? Math.floor((now - new Date(last.at).getTime()) / 86400000) : null;
+  const when = days === null ? '' : days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+  const lastPart = !last ? 'No backup has been made yet.'
+    : last.ok ? `Last backup ${when}.` : `The last backup (${when}) failed: ${last.error || 'unknown error'}.`;
+  return `${lastPart} Weekly backup is ${backup.enabled ? 'on' : 'off'}.`;
+}

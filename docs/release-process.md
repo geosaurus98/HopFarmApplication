@@ -86,6 +86,13 @@ In the Netlify site:
 Releases are safe for anything waiting on tablets. Unsent records are kept on
 each device through app updates and upload when it next syncs.
 
+## Server changes in 1.5.0
+
+1.5.0 adds the weekly backup and the Needs Attention screen. The new app needs
+the new `Setup.gs` and `Api.gs`. After pasting them into the **live** script and
+publishing a new version, choose **Hop Farm → Turn on weekly backup** once in the
+live **Hop Farm Data** (on a computer) and allow the permissions Google asks for.
+
 ## Rules of thumb
 
 - Never test with the live app or the live sheets.

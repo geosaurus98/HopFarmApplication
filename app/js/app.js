@@ -151,6 +151,7 @@ const routes = [
   [/^#\/leaf\/([\w-]+)\/([\w-]+)$/, viewLeaf],
   [/^#\/complete\/([\w-]+)$/, viewComplete],
   [/^#\/reports$/, viewReports],
+  [/^#\/attention$/, viewAttention],
   [/^#\/help$/, viewHelp],
   [/^#\/help\/(mites|plant)$/, viewHelpSection],
   [/^#\/mites$/, viewMites],
@@ -374,7 +375,117 @@ async function viewHome() {
       tile('#/plant-health', 'Plant Health', 'Weekly bay checks', null, 'section-tile plants', 'goPlants')),
     h('div', { class: 'tiles two' },
       tile('#/help', 'Help and Reference', 'Identification photos and how-to'),
+      can(role(), 'admin') ? await attentionTile() : null,
       can(role(), 'owner') ? tile('#/users', 'Manage Users', 'People, codes and tablets') : null));
+  if (can(role(), 'admin')) refreshAttentionInBackground();
+}
+
+// ---------------------------------------------------------------------------
+// Needs attention (admins and owners)
+// The server checks the data; the result is kept on the tablet so the home
+// button can show a count offline. Uploads that failed on this tablet are added.
+// ---------------------------------------------------------------------------
+const ATTENTION_REFRESH_MS = 10 * 60 * 1000;
+
+async function attentionState() {
+  const cached = await db.getMeta('attention');
+  const failedUploads = (await db.getAll('outbox')).filter((o) => o.error);
+  const summary = L.attentionSummary({ issues: cached?.issues || [], backup: cached?.backup || null, failedUploads: failedUploads.length });
+  return { cached, failedUploads, summary };
+}
+
+async function fetchAttention() {
+  const res = await api('attention');
+  const value = { issues: res.issues || [], backup: res.backup || null, checkedAt: nowIso() };
+  await db.setMeta('attention', value);
+  return value;
+}
+
+async function attentionTile() {
+  const { cached, summary } = await attentionState();
+  const sub = !cached ? 'Data checks and backups' : summary.count ? `${summary.count} to look at` : 'All clear';
+  const t = tile('#/attention', 'Needs Attention', sub, null, summary.count ? 'attention' : '', 'attentionTile');
+  if (summary.count) t.append(h('span', { class: 'alert-badge', id: 'attentionCount' }, String(summary.count)));
+  return t;
+}
+
+/** Keeps the home count fresh without slowing the home screen down. */
+let attentionFetching = false;
+async function refreshAttentionInBackground() {
+  if (attentionFetching || !navigator.onLine) return;
+  const cached = await db.getMeta('attention');
+  if (cached && Date.now() - Date.parse(cached.checkedAt) < ATTENTION_REFRESH_MS) return;
+  attentionFetching = true;
+  try {
+    await fetchAttention();
+    const old = document.getElementById('attentionTile');
+    if (old && old.isConnected) old.replaceWith(await attentionTile());
+  } catch (e) { /* offline or signed out: the home screen keeps the last result */ } finally { attentionFetching = false; }
+}
+
+async function viewAttention() {
+  if (!can(role(), 'admin')) { toast('This screen is for admins and owners.', 'bad'); return go('#/'); }
+  const body = h('div', { id: 'attentionBody' });
+  const checked = h('p', { class: 'muted small', id: 'attentionChecked' });
+  const refreshBtn = h('button', { class: 'btn secondary small', id: 'attentionRefresh' }, 'Check again');
+  mount(main(),
+    h('div', { class: 'page-head' }, h('h1', {}, 'Needs Attention'), refreshBtn),
+    checked, body);
+
+  const nameOf = await userNames();
+  const draw = async () => {
+    const { cached, failedUploads, summary } = await attentionState();
+    checked.textContent = cached ? `Checked ${fmtAgo(cached.checkedAt)}.${navigator.onLine ? '' : ' Offline: showing the last check.'}`
+      : navigator.onLine ? 'Checking…' : 'Offline. Connect to the internet to check the data.';
+    const parts = [];
+
+    if (failedUploads.length) {
+      parts.push(h('section', { class: 'card attention-group sev-error', id: 'attnUploads' },
+        h('h2', {}, 'This tablet: uploads refused'),
+        h('p', {}, `${failedUploads.length} change${failedUploads.length === 1 ? '' : 's'} on this tablet could not be saved to the sheet.`),
+        h('ul', { class: 'attention-list' }, failedUploads.slice(0, 10).map((o) => h('li', {}, h('strong', {}, o.table), ' – ', o.error))),
+        h('a', { class: 'btn primary', href: '#/sync' }, 'Open Sync')));
+    }
+
+    if (cached) {
+      const b = cached.backup;
+      parts.push(h('section', { class: `card attention-group ${summary.backupProblem ? 'sev-warn' : 'sev-ok'}`, id: 'attnBackup' },
+        h('h2', {}, summary.backupProblem ? 'Backup needs attention' : 'Backup OK'),
+        h('p', {}, L.backupText(b)),
+        summary.backupProblem ? h('p', { class: 'small' },
+          b && !b.enabled ? 'To turn it on: open the Hop Farm Data sheet on a computer and choose Hop Farm → Turn on weekly backup.'
+            : 'Open the Hop Farm Data sheet on a computer and choose Hop Farm → Back up now. If it fails, the message says why.')
+          : h('p', { class: 'small muted' }, `Excel copies are kept in Google Drive → ${b?.folder || 'Hop Farm Backups'} (last ${b?.keep || 12} weeks).`)));
+
+      for (const g of summary.groups) {
+        parts.push(h('section', { class: `card attention-group sev-${g.key.toLowerCase()}` },
+          h('h2', {}, `${g.title} (${g.items.length})`),
+          h('p', { class: 'small muted' }, g.note),
+          h('ul', { class: 'attention-list' }, g.items.map((i) => {
+            const inner = [h('span', { class: 'attn-record' }, i.table === 'Users' ? nameOf(i.rowId) || i.record : i.record),
+              h('span', { class: 'attn-issue' }, i.issue)];
+            return h('li', {}, i.sampleId ? h('a', { href: `#/sample/${i.sampleId}`, class: 'attn-link' }, inner) : h('div', {}, inner));
+          }))));
+      }
+      if (!summary.groups.length && !summary.backupProblem && !failedUploads.length) {
+        parts.unshift(h('div', { class: 'card all-clear', id: 'allClear' }, h('h2', {}, 'All clear'), h('p', {}, 'No data problems found.')));
+      }
+    }
+    mount(body, ...parts);
+  };
+
+  const check = async () => {
+    if (!navigator.onLine) { toast('Offline: showing the last check.'); return draw(); }
+    refreshBtn.disabled = true; refreshBtn.textContent = 'Checking…';
+    try { await fetchAttention(); } catch (e) {
+      if (e instanceof AuthError) throw e;
+      toast(`Could not check: ${e.message}`, 'bad');
+    } finally { refreshBtn.disabled = false; refreshBtn.textContent = 'Check again'; }
+    if (location.hash === '#/attention') await draw();
+  };
+  refreshBtn.onclick = check;
+  await draw();
+  check();
 }
 
 /** Mite Monitoring: New sample + Analyse; In progress + Completed; admin extras below. */

@@ -52,6 +52,7 @@ function doPost(e) {
       case 'leaves': return json_({ ok: true, leaves: leavesForSample_(body.sampleId) });
       case 'export': return json_(Object.assign({ ok: true }, export_(user, body)));
       case 'dataQuality': return json_({ ok: true, issues: requireAdmin_(user) && dataQualityIssues_() });
+      case 'attention': return json_({ ok: true, issues: requireAdmin_(user) && dataQualityList_(), backup: backupStatus_() });
       case 'listUsers': return json_({ ok: true, users: requireOwner_(user) && readTable_('Users').map(adminUser_) });
       case 'saveUser': return json_(Object.assign({ ok: true }, saveUser_(user, body.user || {}, !!body.isNew)));
       default: throw new Error('Unknown action');

@@ -73,14 +73,22 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
       createFolder: (n) => { const f = makeFolder(n); folder.children.push(f); return f; },
       getFilesByName: (n) => iter(folder.files.filter((f) => f.name === n)),
       createFile: (blob) => {
-        const f = { name: blob.name, bytes: blob.bytes, type: blob.type, getUrl: () => `https://drive.example/${blob.name}`, setDescription: () => f };
+        const f = {
+          name: blob.name, bytes: blob.bytes, type: blob.type, created: new Date(clock.now()), trashed: false,
+          getName: () => f.name, getDateCreated: () => f.created, setTrashed: (t) => { f.trashed = t; return f; },
+          getUrl: () => `https://drive.example/${blob.name}`, setDescription: () => f,
+        };
         folder.files.push(f); files.push(f); return f;
       },
+      getFiles: () => iter(folder.files.filter((f) => !f.trashed)),
     };
     return folder;
   };
   const iter = (arr) => { let i = 0; return { hasNext: () => i < arr.length, next: () => arr[i++] }; };
+  const clock = { offset: 0, now: () => Date.now() + clock.offset };
   const root = makeFolder('root');
+  const triggers = [];
+  const fetched = [];
   const props = {};
 
   const globals = {
@@ -96,9 +104,29 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
       createTextOutput: (text) => ({ text, setMimeType() { return this; }, getContent() { return this.text; } }),
     },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    ScriptApp: {
+      WeekDay: { SUNDAY: 'SUNDAY' },
+      getOAuthToken: () => 'token',
+      getProjectTriggers: () => triggers.slice(),
+      deleteTrigger: (t) => { const i = triggers.indexOf(t); if (i >= 0) triggers.splice(i, 1); },
+      newTrigger: (handler) => {
+        const t = { handler, getHandlerFunction: () => handler };
+        const b = { timeBased: () => b, onWeekDay: (d) => { t.day = d; return b; }, atHour: (hr) => { t.hour = hr; return b; }, create: () => { triggers.push(t); return t; } };
+        return b;
+      },
+    },
+    UrlFetchApp: {
+      fetch: (u) => {
+        fetched.push(u);
+        const id = /\/d\/([^/]+)\/export/.exec(u)[1];
+        const code = books[id] ? 200 : 404;
+        return { getResponseCode: () => code, getBlob: () => { const blob = { name: '', bytes: [1], setName: (n) => { blob.name = n; return blob; } }; return blob; } };
+      },
+    },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
     DriveApp: {
       getFoldersByName: (n) => root.getFoldersByName(n),
+      root,
       createFolder: (n) => root.createFolder(n),
       getFolderById: (id) => { const find = (f) => (f.getId() === id ? f : f.children.map(find).find(Boolean)); const f = find(root); if (!f) throw new Error('no folder'); return f; },
     },
@@ -124,7 +152,7 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
   const dir = path.join(__dirname, '..', '..', 'apps-script');
   // Apps Script runs files in the editor's order, which the user controls; test both orders.
   const src = fileOrder.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
-  const exportsList = ['setupHopFarmWorkbook', 'setUpTestCopy_', 'connectionsSummary_', 'connectSetupSheet_', 'connectPlantSheet_', 'buildPlantExport', 'PLANT_OPTIONS', 'PLANT_EXPORT_HEADERS', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
+  const exportsList = ['runBackup_', 'runWeeklyBackup', 'enableWeeklyBackup_', 'disableWeeklyBackup_', 'backupStatus_', 'dataQualityList_', 'setupHopFarmWorkbook', 'setUpTestCopy_', 'connectionsSummary_', 'connectSetupSheet_', 'connectPlantSheet_', 'buildPlantExport', 'PLANT_OPTIONS', 'PLANT_EXPORT_HEADERS', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
     'doGet', 'doPost', 'requiredLeaves', 'seasonOf', 'weekStarting', 'SCHEMA', 'REPORT_TABS', 'LEAF_EXPORT_HEADERS', 'SUMMARY_HEADERS'];
   const gs = new Function(...Object.keys(globals), `${src}\n;return {${exportsList.join(',')}};`)(...Object.values(globals));
 
@@ -143,7 +171,7 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
   const addRow = (name, obj, book) => { const t = (book || bookOf(name)).sheets[name]; const h = t.data[0]; t.data.push(h.map((k) => (k in obj ? obj[k] : ''))); };
   const post = (body) => JSON.parse(gs.doPost({ postData: { contents: JSON.stringify(body) } }).getContent());
 
-  return { gs, ss, sheets, books, newBook, bookOf, props, table, addRow, post, files };
+  return { gs, ss, sheets, books, newBook, bookOf, props, table, addRow, post, files, triggers, fetched, clock, driveRoot: root };
 }
 
 /**

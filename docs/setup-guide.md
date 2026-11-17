@@ -210,7 +210,7 @@ work uploads under their own names. If a tablet is lost, an owner removes it in
 |---|---|
 | Collecting (any User) | Open the app on Wi-Fi before going out and check it says **All synced**. Tap your name, then **Mite Monitoring → New Mite Sample**: enter the bag number, choose the block and tap **Continue**. Collect the leaves shown, seal the bag and check it's clearly labelled. Back in range, everything uploads by itself. |
 | Analysing (any User) | **Mite Monitoring → Analyse Samples → choose the bag → Start analysis**. Every count starts at 0, so change only what you see, then tap **Next leaf**. Tap **? Help** for identification photos. When the bag is done tap **Sample finished**, then **Complete analysis**; finishing early needs a reason. You can reopen your own analyses for 31 days. |
-| Admin | Everything above, plus **Completed Samples** (all), **All Samples**, **Mite Reports** / **Plant Reports** and exports. Correct any sample; every change to a completed one is logged in **AuditLog**. Run **Hop Farm → Run data quality report** from time to time. |
+| Admin | Everything above, plus **Completed Samples** (all), **All Samples**, **Mite Reports** / **Plant Reports** and exports. Correct any sample; every change to a completed one is logged in **AuditLog**. Check **Needs Attention** on the home screen. |
 | Owner | Everything above, plus **Manage Users**: add people, set their level and sections, give admins and owners codes, and remove tablets. |
 
 **Don't** clear the browser data or uninstall the app while the badge shows
@@ -247,9 +247,46 @@ directly on the tablet.
 
 ## 8. Backups
 
-Google keeps the Sheet's version history automatically (**File → Version
-history**). For an extra copy, download the sheet as `.xlsx` at the end of each
-season. Photos are in the Drive folder **Hop Farm Photos**.
+**Turn on the weekly backup once** (2 min, on a computer): open **Hop Farm Data**,
+choose **Hop Farm → Turn on weekly backup** and allow the permissions Google asks
+for (the backup needs to read your sheets and save files to your Drive). A first
+backup is made straight away.
+
+From then on, every Sunday at about 2am, an Excel (`.xlsx`) copy of **Hop Farm
+Data**, **Users & Setup** and **Plant Health** is saved to the Drive folder
+**Hop Farm Backups**, named with the date. The last 12 weeks are kept; older
+copies go to the Drive bin (recoverable for 30 days). **Hop Farm → Back up now**
+makes an extra copy any time, for example before a big change. **Turn off weekly
+backup** stops it and keeps the copies already made.
+
+To restore, open the backup in Excel, or upload it to Drive and open it with
+Google Sheets, then copy back the rows you need.
+
+Google also keeps each sheet's version history (**File → Version history**).
+Photos are in the Drive folder **Hop Farm Photos**.
+
+Set up the weekly backup in the **live** Hop Farm Data only. The TEST copy
+doesn't need one.
+
+## 9. Needs Attention (admins and owners)
+
+The **Needs Attention** button on the home screen shows how many things need a
+look. It turns amber when there are any. Tap it to see them, most urgent first:
+
+- **This tablet: uploads refused** — changes the server would not accept. Open
+  **Sync** to see why.
+- **Backup** — red flag if the weekly backup is off, failed, or hasn't run for
+  more than 8 days.
+- **Fix these** — wrong or missing data, e.g. a leaf number entered twice from two
+  tablets, a blank count, or a sample marked complete with no leaves.
+- **Check these** — e.g. a bag waiting more than 3 days for analysis, an analysis
+  started but not finished for a week, or a bag number used twice in a season.
+- **For information** — e.g. samples finished below target, with the reason given.
+  These don't count towards the number on the button.
+
+Tap an item to open its sample. The check needs internet. Offline, the screen
+shows the last result. **Check again** re-runs it. It's the same check as
+**Hop Farm → Run data quality report** in the sheet.
 
 ## Troubleshooting
 

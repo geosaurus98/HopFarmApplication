@@ -245,3 +245,20 @@ test('waiting work: counts and the oldest waiting sample', () => {
   assert.deepEqual(L.mitesWaiting([], '2026-11-16'), { awaiting: 0, inProgress: 0, oldestDays: null });
   assert.deepEqual([0, 1, 4].map(L.daysLabel), ['today', '1 day', '4 days']);
 });
+
+test('needs attention: groups by severity, badge counts problems not information', () => {
+  const issues = [
+    { severity: 'INFO', issue: 'below target' },
+    { severity: 'ERROR', issue: 'blank' },
+    { severity: 'WARN', issue: 'waiting 5 days' },
+    { severity: 'WARN', issue: 'stale' },
+  ];
+  const s = L.attentionSummary({ issues, backup: { overdue: true }, failedUploads: 2 });
+  assert.deepEqual(s.groups.map((g) => [g.key, g.items.length]), [['ERROR', 1], ['WARN', 2], ['INFO', 1]]);
+  assert.equal(s.count, 5); // 3 problems + backup + failed uploads
+  assert.equal(L.attentionSummary({}).count, 0);
+  const now = Date.parse('2026-11-17T00:00:00Z');
+  assert.equal(L.backupText({ enabled: true, last: { at: '2026-11-14T00:00:00Z', ok: true } }, now), 'Last backup 3 days ago. Weekly backup is on.');
+  assert.match(L.backupText({ enabled: false, last: null }, now), /No backup has been made yet\. Weekly backup is off/);
+  assert.match(L.backupText({ enabled: true, last: { at: '2026-11-17T00:00:00Z', ok: false, error: 'HTTP 403' } }, now), /today\) failed: HTTP 403/);
+});
