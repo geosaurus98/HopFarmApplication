@@ -48,7 +48,11 @@ export async function api(action, params = {}, creds) {
       redirect: 'follow',
     });
   } catch (e) {
-    throw new OfflineError('Could not reach the server. Check the internet connection.');
+    // The browser reports a blocked reply the same way as no internet. If the
+    // tablet is online, the likely cause is the server (e.g. it needs permission).
+    throw new OfflineError(navigator.onLine
+      ? 'The server did not answer. The internet seems fine, so the server may need attention: open the server address in a browser to see why.'
+      : 'Could not reach the server. Check the internet connection.');
   }
   let body;
   try {
