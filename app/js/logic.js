@@ -450,7 +450,7 @@ export const PLANT_OPTIONS = Object.freeze({
     'Cone Development & Maturation',
     'Harvest Ready',
   ],
-  OverallBineHealth: ['Vigorous', 'Stunted', 'Pale/Chlorotic'],
+  OverallBineHealth: ['Vigorous', 'Normal', 'Stunted', 'Pale/Chlorotic'],
   LeafSize: ['Small', 'Medium', 'Large'],
   LeafDamage: ['Chewing', 'Dark Spotting', 'Light Spotting', 'Vein Staining', 'Curling'],
 });

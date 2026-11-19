@@ -508,7 +508,7 @@ const plantCheck = (id, extra = {}) => ({
   patch: {
     InspectionDate: '2026-11-10', InspectionTime: '09:15', InspectorEmail: 'col@farm.nz',
     BlockVarietyID: 'C2-RIWAKA', Row: 14, Bay: 3, GrowthStage: 'Training Stage (Bines being wrapped)',
-    BineHealth: 'Normal', WeedPressure: 'Low', BinesTrained: 30, AvgBineHeightCm: 85, MaxBineHeightCm: 120,
+    BineHealth: 'Normal', OverallBineHealth: 'Normal', WeedPressure: 'Low', BinesTrained: 30, AvgBineHeightCm: 85, MaxBineHeightCm: 120,
     InternodeUnder1mCm: 12.5, LeafColour: 5, LeafSize: 'Medium', LeafDamage: 'Curling, Chewing', ...extra,
   },
 });
