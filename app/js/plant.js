@@ -5,7 +5,8 @@
 import * as db from './db.js';
 import * as L from './logic.js';
 import { api, syncSoon, OfflineError, AuthError } from './sync.js';
-import { h, mount, toast, confirmDialog, fmtDate, download, field, clearErrorsOnEdit } from './ui.js';
+import { h, mount, toast, confirmDialog, contentDialog, fmtDate, download, field, clearErrorsOnEdit } from './ui.js';
+import { PLANT_HELP, sheetHelp, helpSection } from './help.js';
 
 let ctx; // shared helpers from app.js: { main, go, render, session, userNames, photoInput, photoView, notFound, weekBars, displayName }
 
@@ -278,7 +279,10 @@ async function viewPlantForm(id) {
   mount(ctx.main(),
     h('div', { class: 'page-head' },
       h('h1', {}, existing ? `Edit plant check ${recordLabel(existing)}` : 'New Plant Check'),
-      h('a', { class: 'btn secondary', href: existing ? `#/plant/${existing.CheckID}` : '#/' }, 'Cancel')),
+      h('div', { class: 'row' },
+        // Opens over the form, so nothing typed is lost.
+        h('button', { type: 'button', class: 'btn secondary', id: 'plantHelp', onclick: showPlantHelp }, '? Help'),
+        h('a', { class: 'btn secondary', href: existing ? `#/plant/${existing.CheckID}` : '#/' }, 'Cancel'))),
     form);
   mount(form,
     section('1. Sample details', `Inspector: ${ctx.displayName(me())}`,
@@ -498,4 +502,9 @@ async function viewPlantReports() {
       h('div', { class: 'row' }, tlSeason), tlBox) : null);
   if (used.length) drawTrend();
   if (seasons.length) drawTimeline();
+}
+
+async function showPlantHelp() {
+  const extra = await db.getAll('help');
+  contentDialog('Plant Health help', helpSection(PLANT_HELP.concat(sheetHelp(extra, 'Plant Health'))));
 }

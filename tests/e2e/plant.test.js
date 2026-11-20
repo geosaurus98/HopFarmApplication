@@ -94,6 +94,11 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
     assert.equal(await page.isVisible('#InternodeUnder1mCm'), true);
     await page.fill('#MaxBineHeightCm', '60');
     await page.fill('#InternodeUnder1mCm', '12.5');
+    // Help opens over the form without losing what's been entered.
+    await page.click('#plantHelp');
+    await page.waitForSelector('dialog.wide-dialog:has-text("Plant Health help")');
+    await page.click('dialog.wide-dialog button:has-text("Close")');
+    assert.equal(await page.$('dialog.wide-dialog'), null);
     await page.click('#OverallBineHealth .chip[data-value="Vigorous"]');
     await page.click('#LeafColour .swatch[data-value="5"]');
     await page.click('#LeafSize .chip[data-value="Medium"]');
