@@ -815,3 +815,39 @@ test('attention: admins get the issue list with sample links and backup status; 
   assert.equal(r.backup.enabled, false);
   assert.equal(g.post({ action: 'attention', ...COL }).ok, false);
 });
+
+test('moving Google account: the new Hop Farm Data copy links to the new copies and starts fresh folders', () => {
+  const g = createSeededGas({ split: true });
+  g.ss.name = 'Hop Farm Data';
+  g.props.PHOTO_FOLDER_Samples = 'old-folder'; g.props.BACKUP_FOLDER_ID = 'old-backups'; g.props.LAST_BACKUP = '{"ok":true}';
+  // "Make a copy" of Users & Setup and Plant Health in the new account.
+  const copy = (src, id, name) => {
+    const b = g.newBook(id); b.name = name; delete b.sheets.Sheet1;
+    for (const [n, sh] of Object.entries(src.sheets)) { const t = b.insertSheet(n); t.data.push(...sh.data.map((r) => r.slice())); }
+    return b;
+  };
+  const newSetup = copy(g.setup, 'NEW_SETUP_ID_00000000000000000', 'Hop Farm - Users & Setup');
+  const newPlant = copy(g.plant, 'NEW_PLANT_ID_00000000000000000', 'Hop Farm - Plant Health');
+  const testSetup = copy(g.setup, 'TEST_SETUP_ID_0000000000000000', 'TEST Users & Setup');
+  const url = (b) => `https://docs.google.com/spreadsheets/d/${b.getId()}/edit`;
+
+  assert.throws(() => g.gs.linkCopiedSheets_(url(g.setup), url(newPlant)), /already linked/);
+  assert.throws(() => g.gs.linkCopiedSheets_(url(testSetup), url(newPlant)), /TEST sheet/);
+  assert.throws(() => g.gs.linkCopiedSheets_(url(newSetup), url(newSetup)), /two different sheets/);
+  assert.equal(g.props.SETUP_SHEET_ID, g.setup.getId(), 'nothing changed after a refusal');
+
+  const msg = g.gs.linkCopiedSheets_(url(newSetup), url(newPlant));
+  assert.match(msg, /LIVE server/);
+  assert.equal(g.props.SETUP_SHEET_ID, newSetup.getId());
+  assert.equal(g.props.PLANT_SHEET_ID, newPlant.getId());
+  assert.equal(g.props.PHOTO_FOLDER_Samples, undefined);
+  assert.equal(g.props.BACKUP_FOLDER_ID, undefined);
+  assert.equal(g.props.LAST_BACKUP, undefined);
+  // People and codes come from the new copy.
+  newSetup.sheets.Users.data[1][newSetup.sheets.Users.data[0].indexOf('AccessCode')] = '999999';
+  assert.equal(g.post({ action: 'login', login: 'ana', code: '999999' }).ok, true);
+
+  // A TEST sheet can't be linked as live.
+  g.ss.name = 'TEST Hop Farm Data';
+  assert.throws(() => g.gs.linkCopiedSheets_(url(newSetup), ''), /Set up as TEST copy/);
+});

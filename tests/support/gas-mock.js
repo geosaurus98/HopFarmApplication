@@ -123,7 +123,7 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
         return { getResponseCode: () => code, getBlob: () => { const blob = { name: '', bytes: [1], setName: (n) => { blob.name = n; return blob; } }; return blob; } };
       },
     },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty: (k, v) => { props[k] = v; }, deleteProperty: (k) => { delete props[k]; }, getKeys: () => Object.keys(props) }) },
     DriveApp: {
       getFoldersByName: (n) => root.getFoldersByName(n),
       root,
@@ -152,7 +152,7 @@ function createGas({ tz = 'Pacific/Auckland', user = 'owner@farm.nz', fileOrder 
   const dir = path.join(__dirname, '..', '..', 'apps-script');
   // Apps Script runs files in the editor's order, which the user controls; test both orders.
   const src = fileOrder.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
-  const exportsList = ['runBackup_', 'runWeeklyBackup', 'enableWeeklyBackup_', 'disableWeeklyBackup_', 'backupStatus_', 'dataQualityList_', 'setupHopFarmWorkbook', 'setUpTestCopy_', 'connectionsSummary_', 'connectSetupSheet_', 'connectPlantSheet_', 'buildPlantExport', 'PLANT_OPTIONS', 'PLANT_EXPORT_HEADERS', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
+  const exportsList = ['linkCopiedSheets_', 'runBackup_', 'runWeeklyBackup', 'enableWeeklyBackup_', 'disableWeeklyBackup_', 'backupStatus_', 'dataQualityList_', 'setupHopFarmWorkbook', 'setUpTestCopy_', 'connectionsSummary_', 'connectSetupSheet_', 'connectPlantSheet_', 'buildPlantExport', 'PLANT_OPTIONS', 'PLANT_EXPORT_HEADERS', 'buildLeafExport', 'buildSampleSummary', 'buildDataQualityReport',
     'doGet', 'doPost', 'requiredLeaves', 'seasonOf', 'weekStarting', 'SCHEMA', 'REPORT_TABS', 'LEAF_EXPORT_HEADERS', 'SUMMARY_HEADERS'];
   const gs = new Function(...Object.keys(globals), `${src}\n;return {${exportsList.join(',')}};`)(...Object.values(globals));
 

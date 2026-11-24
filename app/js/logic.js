@@ -648,3 +648,24 @@ export function backupText(backup, now = Date.now()) {
     : last.ok ? `Last backup ${when}.` : `The last backup (${when}) failed: ${last.error || 'unknown error'}.`;
   return `${lastPart} Weekly backup is ${backup.enabled ? 'on' : 'off'}.`;
 }
+
+/**
+ * What a tablet should store when server addresses change.
+ * `previous`: replaced servers whose tablet list did NOT come along (forget the tablet setup).
+ * `moved`: { old: new } for servers that moved with their sheets (keep the setup, change address).
+ * Returns { device, session, lastLogin, changed }.
+ */
+export function serverMove({ device, session, lastLogin }, { previous = [], moved = {}, fallback }) {
+  let changed = false;
+  const fix = (u) => (u && moved[u]) || (u && previous.includes(u) ? fallback : u);
+  const out = { device, session, lastLogin };
+  if (device && moved[device.apiUrl]) { out.device = { ...device, apiUrl: moved[device.apiUrl] }; changed = true; }
+  else if (device && previous.includes(device.apiUrl)) { out.device = null; changed = true; }
+  if (lastLogin && fix(lastLogin.apiUrl) !== lastLogin.apiUrl) { out.lastLogin = { ...lastLogin, apiUrl: fix(lastLogin.apiUrl) }; changed = true; }
+  if (session && fix(session.apiUrl) !== session.apiUrl) {
+    changed = true;
+    // A name-picked sign-in needs the tablet setup; if that was forgotten, sign in again.
+    out.session = session.code || out.device ? { ...session, apiUrl: fix(session.apiUrl) } : null;
+  }
+  return { ...out, changed };
+}

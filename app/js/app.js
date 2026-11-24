@@ -3,7 +3,7 @@ import * as L from './logic.js';
 import { STATUS, COUNT_FIELDS, can } from './logic.js';
 import { api, sync, syncSoon, onStatus, refreshCounts, startAutoSync, fetchLeaves, AuthError, OfflineError, getStatus } from './sync.js';
 import { h, svg, mount, toast, confirmDialog, choiceDialog, contentDialog, fmtDate, fmtDateTime, fmtAgo, pct, download, field, statusPill, progressBar, clearErrorsOnEdit } from './ui.js';
-import { DEFAULT_API_URL, APP_VERSION, IS_LIVE_APP, LIVE_API_URL, PREVIOUS_API_URLS } from './config.js';
+import { DEFAULT_API_URL, APP_VERSION, IS_LIVE_APP, LIVE_API_URL, PREVIOUS_API_URLS, MOVED_API_URLS } from './config.js';
 import { initPlant, plantRoutes } from './plant.js';
 import { MITE_HELP, PLANT_HELP, sheetHelp, helpSection } from './help.js';
 
@@ -57,16 +57,12 @@ async function boot() {
  * Forget that setup so an admin can sign in again on the current server.
  */
 async function moveOffOldServer() {
-  const old = (u) => PREVIOUS_API_URLS.includes(u);
-  const device = await db.getMeta('device');
-  if (device && old(device.apiUrl)) await db.setMeta('device', null);
-  const last = await db.getMeta('lastLogin');
-  if (last && old(last.apiUrl)) await db.setMeta('lastLogin', { ...last, apiUrl: DEFAULT_API_URL });
-  const s = await db.getMeta('session');
-  if (s && old(s.apiUrl)) {
-    // Code sign-ins carry on with the new server; tablet sign-ins need the tablet set up again.
-    await db.setMeta('session', s.code ? { ...s, apiUrl: DEFAULT_API_URL } : null);
-  }
+  const [device, session, lastLogin] = await Promise.all([db.getMeta('device'), db.getMeta('session'), db.getMeta('lastLogin')]);
+  const r = L.serverMove({ device, session, lastLogin }, { previous: PREVIOUS_API_URLS, moved: MOVED_API_URLS, fallback: DEFAULT_API_URL });
+  if (!r.changed) return;
+  if (r.device !== device) await db.setMeta('device', r.device);
+  if (r.session !== session) await db.setMeta('session', r.session);
+  if (r.lastLogin !== lastLogin) await db.setMeta('lastLogin', r.lastLogin);
 }
 
 /** Forget this tablet's worker setup (from the sign-in screen), e.g. to use another server. */

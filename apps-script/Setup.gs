@@ -232,6 +232,7 @@ function onOpen() {
     .addItem('Connect Plant Health sheet…', 'connectPlantSheet')
     .addSeparator()
     .addItem('Set up as TEST copy…', 'setUpTestCopy')
+    .addItem('Link copied sheets (moving Google account)…', 'linkCopiedSheets')
     .addItem('Show which sheets this script uses', 'showConnections')
     .addToUi();
 }
@@ -1160,4 +1161,69 @@ function backupStatus_() {
     folder: BACKUP_FOLDER_NAME,
     keep: BACKUP_KEEP
   };
+}
+
+// ---------------------------------------------------------------------------
+// Moving to another Google account
+// The sheets are copied into the new account (File → Make a copy), which also
+// copies this script but not its settings, deployment or weekly trigger.
+// Run this in the new copy of Hop Farm Data to link it to the new copies of
+// Users & Setup and Plant Health. Photos and backups then go to the new
+// account's Drive.
+// ---------------------------------------------------------------------------
+function linkCopiedSheets() {
+  const ui = SpreadsheetApp.getUi();
+  const ok = ui.alert('Link copied sheets',
+    'Use this in the NEW copy of Hop Farm Data, after copying all the sheets into the new Google account.\n\n' +
+    'You will need the addresses of the new copies of "Users & Setup" and "Plant Health".\n\nContinue?',
+    ui.ButtonSet.YES_NO);
+  if (ok !== ui.Button.YES) return;
+  const a = ui.prompt('Users & Setup', 'Paste the address of the NEW copy of Users & Setup:', ui.ButtonSet.OK_CANCEL);
+  if (a.getSelectedButton() !== ui.Button.OK) return;
+  const b = ui.prompt('Plant Health', 'Paste the address of the NEW copy of Plant Health (leave blank if you have no Plant Health sheet):', ui.ButtonSet.OK_CANCEL);
+  if (b.getSelectedButton() !== ui.Button.OK) return;
+  try {
+    ui.alert('Sheets linked', linkCopiedSheets_(a.getResponseText(), b.getResponseText()), ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Not changed', e.message, ui.ButtonSet.OK);
+  }
+}
+
+function linkCopiedSheets_(setupUrl, plantUrl) {
+  const main = SpreadsheetApp.getActive();
+  if (/^TEST\b/i.test(main.getName())) {
+    throw new Error('This is a TEST sheet. Use Hop Farm → Set up as TEST copy… instead. Nothing changed.');
+  }
+  const props = PropertiesService.getScriptProperties();
+  const targets = { setup: sheetIdFromUrl_(setupUrl) };
+  if (String(plantUrl || '').trim()) targets.plant = sheetIdFromUrl_(plantUrl);
+  if (!targets.setup) throw new Error('Paste the address of the Users & Setup sheet. Nothing changed.');
+  if (targets.setup === targets.plant) throw new Error('Users & Setup and Plant Health must be two different sheets. Nothing changed.');
+  const need = { setup: 'Users', plant: 'PlantChecks' };
+  Object.keys(targets).forEach(kind => {
+    const id = targets[kind];
+    const title = LINKED_SHEETS[kind].title;
+    if (id === main.getId()) throw new Error('That is this sheet. Use the new copy of ' + title + '. Nothing changed.');
+    if (id === linkedSheetId_(kind)) {
+      throw new Error('That ' + title + ' sheet is the one already linked (the old account\'s sheet). Use the new copy. Nothing changed.');
+    }
+    let book;
+    try { book = SpreadsheetApp.openById(id); } catch (e) {
+      throw new Error('Could not open the ' + title + ' sheet. Check the address, and that this Google account can edit it. Nothing changed.');
+    }
+    if (/^TEST\b/i.test(book.getName())) throw new Error('"' + book.getName() + '" is a TEST sheet. Use the live copy. Nothing changed.');
+    if (!book.getSheetByName(need[kind])) {
+      throw new Error('The ' + title + ' sheet has no "' + need[kind] + '" tab. Use a copy of the live ' + title + ' sheet. Nothing changed.');
+    }
+  });
+  props.setProperty(ENV_PROP, 'LIVE');
+  props.setProperty(SETUP_SHEET_PROP, targets.setup);
+  if (targets.plant) props.setProperty(PLANT_SHEET_PROP, targets.plant); else props.deleteProperty(PLANT_SHEET_PROP);
+  // Folders belong to the old account: start fresh ones in this account's Drive.
+  props.getKeys().filter(k => /^PHOTO_FOLDER_/.test(k) || k === BACKUP_FOLDER_PROP || k === BACKUP_PROP)
+    .forEach(k => props.deleteProperty(k));
+  Object.keys(linkedSsCache_).forEach(k => delete linkedSsCache_[k]);
+  setupHopFarmWorkbook();
+  return connectionsSummary_() + '\n\nNext:\n1. Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).\n' +
+    '2. Send the /exec address so the app can be switched over.\n3. Hop Farm → Turn on weekly backup.';
 }

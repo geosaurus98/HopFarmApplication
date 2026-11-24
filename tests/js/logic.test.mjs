@@ -262,3 +262,24 @@ test('needs attention: groups by severity, badge counts problems not information
   assert.match(L.backupText({ enabled: false, last: null }, now), /No backup has been made yet\. Weekly backup is off/);
   assert.match(L.backupText({ enabled: true, last: { at: '2026-11-17T00:00:00Z', ok: false, error: 'HTTP 403' } }, now), /today\) failed: HTTP 403/);
 });
+
+test('server moves: a moved server keeps the tablet set up; a replaced one forgets it', () => {
+  const OLD = 'https://old/exec', NEW = 'https://new/exec', GONE = 'https://gone/exec', DEF = 'https://default/exec';
+  const opts = { previous: [GONE], moved: { [OLD]: NEW }, fallback: DEF };
+  const device = { id: 'd1', token: 't', apiUrl: OLD };
+  let r = L.serverMove({ device, session: { apiUrl: OLD, worker: 'col@farm.nz' }, lastLogin: { apiUrl: OLD, login: 'ana' } }, opts);
+  assert.equal(r.changed, true);
+  assert.deepEqual(r.device, { id: 'd1', token: 't', apiUrl: NEW });
+  assert.equal(r.session.apiUrl, NEW, 'worker stays signed in');
+  assert.equal(r.lastLogin.apiUrl, NEW);
+
+  r = L.serverMove({ device: { ...device, apiUrl: GONE }, session: { apiUrl: GONE, worker: 'col@farm.nz' }, lastLogin: { apiUrl: GONE } }, opts);
+  assert.equal(r.device, null);
+  assert.equal(r.session, null, 'worker signs in again once the tablet is set up');
+  assert.equal(r.lastLogin.apiUrl, DEF);
+  r = L.serverMove({ device: null, session: { apiUrl: GONE, code: '111111' }, lastLogin: null }, opts);
+  assert.equal(r.session.apiUrl, DEF, 'code sign-ins carry on');
+
+  r = L.serverMove({ device: { ...device, apiUrl: NEW }, session: null, lastLogin: null }, opts);
+  assert.equal(r.changed, false);
+});
