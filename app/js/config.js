@@ -14,7 +14,7 @@ export const LIVE_HOSTS = ['peppy-pie-7f7463.netlify.app'];
 export const LIVE_API_URL = 'https://script.google.com/macros/s/AKfycbxMkGICFRtKopeH2SK4jMVYpHJdedSKOaAWREMt3El9mJVODePt-fgsnyxD1XycFy-X/exec';
 
 /** Test server: the deployment attached to the TEST copy of Hop Farm Data. Paste it here once it exists. */
-export const TEST_API_URL = 'https://script.google.com/macros/s/AKfycbx6ojOrv1lPdKdeVw7OCHY40o1dKSNzBeWqSHyfBH6NXWET0BPxNMhxtZYR6QUhqX7FQw/exec';
+export const TEST_API_URL = 'https://script.google.com/macros/s/AKfycbxtDAsdKCXoHvVUnVu6q0rs2_h2Tnsvcv_KRPWCHd4WCHPQPyWEXIjZADrQ_o0ScDpx4A/exec';
 
 /**
  * Server addresses that have been replaced. A tablet still set up with one of these
@@ -30,6 +30,9 @@ export const PREVIOUS_API_URLS = [
  * working: they just switch address, and anything waiting to upload goes to the new server.
  */
 export const MOVED_API_URLS = {
+  // TEST server, moved to the work Google account
+  'https://script.google.com/macros/s/AKfycbx6ojOrv1lPdKdeVw7OCHY40o1dKSNzBeWqSHyfBH6NXWET0BPxNMhxtZYR6QUhqX7FQw/exec':
+    'https://script.google.com/macros/s/AKfycbxtDAsdKCXoHvVUnVu6q0rs2_h2Tnsvcv_KRPWCHd4WCHPQPyWEXIjZADrQ_o0ScDpx4A/exec',
 };
 
 export const IS_LIVE_APP = typeof location !== 'undefined' && LIVE_HOSTS.includes(location.hostname);
@@ -37,4 +40,4 @@ export const IS_LIVE_APP = typeof location !== 'undefined' && LIVE_HOSTS.include
 /** Default server address shown on the sign-in screen (people can still type another). */
 export const DEFAULT_API_URL = IS_LIVE_APP ? LIVE_API_URL : TEST_API_URL;
 
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.6.1';
