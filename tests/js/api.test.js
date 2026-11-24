@@ -851,3 +851,18 @@ test('moving Google account: the new Hop Farm Data copy links to the new copies 
   g.ss.name = 'TEST Hop Farm Data';
   assert.throws(() => g.gs.linkCopiedSheets_(url(newSetup), ''), /Set up as TEST copy/);
 });
+
+test('roles typed by hand in any capitalisation still work', () => {
+  const g = createSeededGas();
+  const users = g.sheets.Users.data;
+  const iRole = users[0].indexOf('Role');
+  const ana = users.findIndex((r) => r.includes('ana'));
+  for (const typed of ['owner', ' OWNER ', 'administrator']) {
+    users[ana][iRole] = typed;
+    const r = g.post({ action: 'login', login: 'ana', code: '111111' });
+    assert.equal(r.ok, true, `${typed}: ${r.error}`);
+    assert.equal(r.user.Role, 'Owner');
+  }
+  users[ana][iRole] = 'Boss';
+  assert.match(g.post({ action: 'login', login: 'ana', code: '111111' }).error, /no valid role/);
+});

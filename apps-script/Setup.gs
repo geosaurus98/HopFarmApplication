@@ -159,9 +159,12 @@ const ROLES = ['User', 'Admin', 'Owner'];
 /** Earlier role names, upgraded automatically. */
 const LEGACY_ROLES = { Collector: 'User', Analyst: 'User', Administrator: 'Owner' };
 
+/** Role as stored, tidied: any capitalisation, extra spaces and old names are accepted. */
 function normalizeRole_(role) {
-  const r = String(role || '').trim();
-  return LEGACY_ROLES[r] || r;
+  const r = String(role || '').trim().toLowerCase();
+  const all = ROLES.concat(Object.keys(LEGACY_ROLES));
+  const hit = all.filter(x => x.toLowerCase() === r)[0];
+  return hit ? (LEGACY_ROLES[hit] || hit) : String(role || '').trim();
 }
 
 const COUNT_FIELDS = ['TetranychusCount', 'PhytoseiulusCount', 'TwoSpotEggCount',

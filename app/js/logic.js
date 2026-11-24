@@ -72,7 +72,11 @@ export const HIGH_COUNT = 100;
  */
 export const ROLES = Object.freeze(['User', 'Admin', 'Owner']);
 const LEGACY_ROLES = { Collector: 'User', Analyst: 'User', Administrator: 'Owner' };
-export const normalizeRole = (r) => LEGACY_ROLES[r] || r || '';
+export const normalizeRole = (r) => {
+  const t = String(r || '').trim();
+  const hit = [...ROLES, ...Object.keys(LEGACY_ROLES)].find((x) => x.toLowerCase() === t.toLowerCase());
+  return hit ? (LEGACY_ROLES[hit] || hit) : t;
+};
 export const isAdminRole = (r) => ['Admin', 'Owner'].includes(normalizeRole(r));
 export const isOwnerRole = (r) => normalizeRole(r) === 'Owner';
 

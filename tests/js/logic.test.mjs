@@ -283,3 +283,8 @@ test('server moves: a moved server keeps the tablet set up; a replaced one forge
   r = L.serverMove({ device: { ...device, apiUrl: NEW }, session: null, lastLogin: null }, opts);
   assert.equal(r.changed, false);
 });
+
+test('normalizeRole accepts any capitalisation and old names', () => {
+  assert.deepEqual(['owner', ' Admin ', 'USER', 'Analyst', 'administrator', ''].map(L.normalizeRole), ['Owner', 'Admin', 'User', 'User', 'Owner', '']);
+  assert.equal(L.isAdminRole('admin'), true);
+});
