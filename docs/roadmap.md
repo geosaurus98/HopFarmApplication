@@ -16,7 +16,7 @@ predators as well as two-spotted mites.
 | | Addition | Records | Needs from Jason |
 |---|---|---|---|
 | ◐ | **Predator release log** | Date, block, product or supplier, quantity released, cost | Products and suppliers used; units (bottles, per ha?) |
-| ◐ | **Spray diary** | Date, block, product, rate, water volume, operator, weather, target pest | What his compliance or export programme requires on a spray record; product list; whether withholding periods should be tracked |
+| ▶ | **Spray diary** — plan in [spray-diary-plan.md](spray-diary-plan.md); also covers predator releases and fertiliser | Date, block, product, rate, water volume, operator, weather, target pest | What his compliance or export programme requires on a spray record; product list; whether withholding periods should be tracked |
 
 ## 2. Season and harvest
 
