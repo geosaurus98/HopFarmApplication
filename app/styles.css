@@ -380,3 +380,8 @@ table.timeline td:first-child, table.timeline th:first-child { text-align: left;
 .attn-record { font-weight: 700; }
 .all-clear { border-left: 6px solid #2e7d32; }
 .all-clear h2 { color: #2e7d32; margin-top: 0; }
+
+/* Back button at the top of each screen */
+.back-btn { display: inline-flex; align-items: center; gap: .3rem; margin: 0 0 .6rem; padding: .45rem .9rem .45rem .7rem;
+  border-radius: 999px; border: 2px solid var(--green-dark, #2e5d1e); color: var(--green-dark, #2e5d1e); font-weight: 700; text-decoration: none; background: #fff; }
+.back-btn:hover { background: rgba(0,0,0,.04); }

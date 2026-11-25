@@ -145,6 +145,19 @@ test('shared tablet: collect offline, analyse leaf by leaf, complete, admin repo
     await page.click('text=Analyse Samples');
     await page.waitForSelector('.sample-card:has-text("1042")');
     await page.click('.sample-card:has-text("1042")');
+    // Back returns to the previous screen: sample → list → Mite Monitoring → home.
+    await page.waitForSelector('button:has-text("Start analysis")');
+    await page.click('#backBtn');
+    await page.waitForSelector('.sample-card:has-text("1042")');
+    assert.match(page.url(), /#\/samples\/queue$/);
+    await page.click('#backBtn');
+    await page.waitForSelector('#analyseTile');
+    await page.click('#backBtn');
+    await page.waitForSelector('#goMites');
+    assert.equal(await page.$('#backBtn'), null, 'no Back on the home screen');
+    await page.click('#goMites');
+    await page.click('text=Analyse Samples');
+    await page.click('.sample-card:has-text("1042")');
     await page.click('button:has-text("Start analysis")');
     await page.waitForSelector('#leafNumber:has-text("1")');
     // Every count starts at 0; the comment box is always there; two buttons only.

@@ -204,6 +204,51 @@ function render() {
   return renderChain;
 }
 
+// ---------------------------------------------------------------------------
+// Back button: returns to the screen you came from (skipping data-entry forms
+// you've finished with); if there's none, to the screen "above" this one.
+// ---------------------------------------------------------------------------
+const NO_BACK = [/^#?\/?$/, /^#\/login/, /^#\/switch$/, /^#\/new$/, /^#\/edit\//, /^#\/leaf\//, /^#\/complete\//,
+  /^#\/plant\/new$/, /^#\/plant\/edit\//, /^#\/user\//];
+// Screens you shouldn't land back on: forms already saved or left.
+const SKIP_ON_BACK = [/^#\/new$/, /^#\/edit\//, /^#\/leaf\//, /^#\/complete\//, /^#\/plant\/new$/, /^#\/plant\/edit\//, /^#\/user\//, /^#\/switch$/, /^#\/login/];
+const PARENTS = [
+  [/^#\/samples\//, '#/mites'], [/^#\/sample\//, '#/mites'], [/^#\/reports$/, '#/mites'], [/^#\/mites$/, '#/'],
+  [/^#\/help\/.+/, '#/help'], [/^#\/help$/, '#/'],
+  [/^#\/plant-reports$/, '#/plant-health'], [/^#\/plants$/, '#/plant-health'], [/^#\/plant\//, '#/plant-health'], [/^#\/plant-health$/, '#/'],
+];
+const navStack = [];
+function noteVisit(hash) {
+  if (navStack[navStack.length - 1] === hash) return;
+  if (navStack[navStack.length - 2] === hash) navStack.pop(); // browser back
+  else navStack.push(hash);
+  if (navStack.length > 50) navStack.shift();
+}
+function backTarget(hash) {
+  for (let i = navStack.length - 2; i >= 0; i--) {
+    const h2 = navStack[i];
+    if (h2 !== hash && !SKIP_ON_BACK.some((re) => re.test(h2))) return { hash: h2, index: i };
+  }
+  const parent = PARENTS.find(([re]) => re.test(hash));
+  return parent ? { hash: parent[1], index: -1 } : { hash: '#/', index: -1 };
+}
+function addBackButton(hash) {
+  if (NO_BACK.some((re) => re.test(hash)) || main().querySelector('#backBtn')) return;
+  const target = backTarget(hash);
+  // A person with one section has it as their home: no Back from it to itself.
+  if (target.hash === '#/' && !(L.hasSection(session.user, 'Mites') && L.hasSection(session.user, 'Plant Health')) &&
+    ['#/mites', '#/plant-health'].includes(hash)) return;
+  const btn = h('a', {
+    class: 'back-btn', id: 'backBtn', href: target.hash,
+    onclick: (e) => {
+      e.preventDefault();
+      if (target.index >= 0) navStack.length = target.index; // forget the screens we're leaving
+      go(target.hash);
+    },
+  }, '← Back');
+  main().prepend(btn);
+}
+
 async function renderNow() {
   const hash = location.hash || '#/';
   if (!session && !hash.startsWith('#/login')) { location.hash = '#/login'; return; }
@@ -211,8 +256,10 @@ async function renderNow() {
     const m = re.exec(hash);
     if (m) {
       if (needsAuth && !session) return;
+      noteVisit(hash);
       try {
         await fn(...m.slice(1));
+        if ((location.hash || '#/') === hash) addBackButton(hash);
       } catch (e) {
         // Signed out while this screen was still loading: the sign-in screen takes over.
         if (needsAuth && !session) return;
