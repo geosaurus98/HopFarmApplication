@@ -70,7 +70,8 @@ export const HIGH_COUNT = 100;
  * Admin — User + all completed / all samples, reports, exports, corrections.
  * Owner — Admin + people, access codes and tablets.
  */
-export const ROLES = Object.freeze(['User', 'Admin', 'Owner']);
+/** Levels, lowest first. Trainee: Mite Monitoring only; User: given sections; Admin: everything + reports; Owner: + people. */
+export const ROLES = Object.freeze(['Trainee', 'User', 'Admin', 'Owner']);
 const LEGACY_ROLES = { Collector: 'User', Analyst: 'User', Administrator: 'Owner' };
 export const normalizeRole = (r) => {
   const t = String(r || '').trim();
@@ -78,6 +79,8 @@ export const normalizeRole = (r) => {
   return hit ? (LEGACY_ROLES[hit] || hit) : t;
 };
 export const isAdminRole = (r) => ['Admin', 'Owner'].includes(normalizeRole(r));
+/** Trainees and Users tap their name on a set-up tablet; admins and owners use a code. */
+export const isWorkerRole = (r) => ['Trainee', 'User'].includes(normalizeRole(r));
 export const isOwnerRole = (r) => normalizeRole(r) === 'Owner';
 
 /** Did this person analyse the sample (started or completed it)? */
@@ -432,6 +435,7 @@ export const SECTIONS = Object.freeze(['Mites', 'Plant Health']);
 export function userSections(user) {
   if (!user) return [];
   if (isAdminRole(user.Role)) return [...SECTIONS];
+  if (normalizeRole(user.Role) === 'Trainee') return ['Mites'];
   const raw = Array.isArray(user.Sections) ? user.Sections : String(user.Sections || '').split(',');
   const valid = raw.map((x) => String(x).trim()).filter((x) => SECTIONS.includes(x));
   return valid.length ? valid : [...SECTIONS];

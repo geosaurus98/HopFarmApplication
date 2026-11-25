@@ -23,6 +23,7 @@
 
 | Level | Can |
 |---|---|
+| **Trainee** | Mite Monitoring only: collect and analyse samples, reopen their own analyses for 31 days. New people who add themselves on a tablet start here. (Added Nov 2026.) |
 | **User** | Collect and analyse mite samples, do plant checks. See their own completed analyses and reopen or correct them for 31 days. Cancel samples they collected before analysis starts. |
 | **Admin** | User, plus all completed samples, all samples, reports, exports, data quality, and correcting or reopening any sample at any time. |
 | **Owner** | Admin, plus people, access codes and tablets. Other owners are view-only in the app. |

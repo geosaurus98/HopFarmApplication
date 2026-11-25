@@ -70,7 +70,11 @@ can add themselves on a set-up tablet. You rarely need to edit this tab by hand.
   tablet without an email get an ID like `sam.wilson@workers.hopfarm`.
 - `Username`: for signing in with a code; must be unique.
 - `FullName`: their real name, shown in the app, the name list and exports.
-- `Role`: the person's level:
+- `Role`: the person's level, lowest first:
+  - **Trainee**: new starters. Mite Monitoring only (collect and analyse samples;
+    reopens their own analyses for 31 days). Taps their name on a set-up tablet;
+    no code needed. People who add themselves with **I'm new here** start as
+    Trainees. The owner moves them up to User when they're ready.
   - **User**: collects and analyses samples and does plant checks. Reopens their
     own analyses for 31 days. Taps their name on a set-up tablet; no code needed.
   - **Admin**: everything a User does, plus all completed samples, all samples,
@@ -208,8 +212,8 @@ work uploads under their own names. If a tablet is lost, an owner removes it in
 
 | Who | Routine |
 |---|---|
-| Collecting (any User) | Open the app on Wi-Fi before going out and check it says **All synced**. Tap your name, then **Mite Monitoring → New Mite Sample**: enter the bag number, choose the block and tap **Continue**. Collect the leaves shown, seal the bag and check it's clearly labelled. Back in range, everything uploads by itself. |
-| Analysing (any User) | **Mite Monitoring → Analyse Samples → choose the bag → Start analysis**. Every count starts at 0, so change only what you see, then tap **Next leaf**. Tap **? Help** for identification photos. When the bag is done tap **Sample finished**, then **Complete analysis**; finishing early needs a reason. You can reopen your own analyses for 31 days. |
+| Collecting (any Trainee or User) | Open the app on Wi-Fi before going out and check it says **All synced**. Tap your name, then **Mite Monitoring → New Mite Sample**: enter the bag number, choose the block and tap **Continue**. Collect the leaves shown, seal the bag and check it's clearly labelled. Back in range, everything uploads by itself. |
+| Analysing (any Trainee or User) | **Mite Monitoring → Analyse Samples → choose the bag → Start analysis**. Every count starts at 0, so change only what you see, then tap **Next leaf**. Tap **? Help** for identification photos. When the bag is done tap **Sample finished**, then **Complete analysis**; finishing early needs a reason. You can reopen your own analyses for 31 days. |
 | Admin | Everything above, plus **Completed Samples** (all), **All Samples**, **Mite Reports** / **Plant Reports** and exports. Correct any sample; every change to a completed one is logged in **AuditLog**. Check **Needs Attention** on the home screen. |
 | Owner | Everything above, plus **Manage Users**: add people, set their level and sections, give admins and owners codes, and remove tablets. |
 

@@ -330,11 +330,14 @@ test('shared tablet: collect offline, analyse leaf by leaf, complete, admin repo
     await page.click('text=Manage Users');
     await page.waitForSelector('.sample-card:has-text("Cole Collector")');
     assert.ok(await page.isVisible('.sample-card:has-text("Field tablet 1")'));
-    // A new User needs no code.
+    // A new User needs no code. Levels, lowest first.
     await page.click('text=+ Add person');
+    await page.waitForSelector('#Role');
+    assert.deepEqual(await page.$$eval('#Role option', (o) => o.map((x) => x.value)), ['Trainee', 'User', 'Admin', 'Owner']);
     await page.fill('#FullName', 'Sam Wilson');
     assert.equal(await page.inputValue('#Username'), 'sam');
     await page.fill('#UserEmail', 'sam@farm.nz');
+    await page.selectOption('#Role', 'User');
     await page.click('button:has-text("Add person")');
     await page.waitForSelector('#noCodeNote');
     // Another owner is view-only.
@@ -359,9 +362,11 @@ test('shared tablet: collect offline, analyse leaf by leaf, complete, admin repo
     await page.click('text=I’m new here');
     await page.fill('#fullName', 'Kiri Tane');
     await page.click('button:has-text("Add me")');
-    await page.waitForSelector('.tiles'); // signed in and on the home screen
-    assert.ok(await page.isVisible('text=Kiri Tane · User'));
-    assert.ok(g.table('Users').some((u) => u.FullName === 'Kiri Tane' && u.Role === 'User'));
+    // New people start as Trainees: straight into Mite Monitoring, no Plant Health.
+    await page.waitForSelector('text=New Mite Sample');
+    assert.ok(await page.isVisible('text=Kiri Tane · Trainee'));
+    assert.equal(await page.isVisible('#goPlants'), false);
+    assert.ok(g.table('Users').some((u) => u.FullName === 'Kiri Tane' && u.Role === 'Trainee' && u.Sections === 'Mites'));
 
     // Server unreachable: changes wait safely.
     await codeSignIn('ana', '111111');

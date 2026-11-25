@@ -17,7 +17,7 @@ figures are calculated from the leaf rows; nothing is pre-aggregated.
 | UserEmail | Email, **key** | Google sign-in address |
 | Username | Text | Typed to sign in; unique, not case-sensitive (email also works) |
 | FullName | Text | Real name, shown in the app and exports |
-| Role | `Collector` / `Analyst` / `Administrator` | Drives views, actions and update permissions |
+| Role | `Trainee` / `User` / `Admin` / `Owner` | Drives views, actions and update permissions. Trainee = Mite Monitoring only |
 | Active | TRUE/FALSE | Inactive users cannot sign in; their history stays |
 | AccessCode | Text | The code the person types to sign in (never sent to devices) |
 | CreatedAt, UpdatedAt | DateTime | |

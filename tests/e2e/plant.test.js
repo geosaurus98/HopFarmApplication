@@ -212,6 +212,11 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
     await page.goto(`${url}/#/user/new`);
     await page.fill('#FullName', 'Pat Plants');
     await page.fill('#UserEmail', 'pat@farm.nz');
+    // New people start as Trainees: Mite Monitoring only, sections locked.
+    assert.equal(await page.inputValue('#Role'), 'Trainee');
+    assert.equal(await page.isDisabled('#section-PlantHealth'), true);
+    assert.equal(await page.isChecked('#section-PlantHealth'), false);
+    await page.selectOption('#Role', 'User');
     await page.uncheck('#section-Mites');
     await page.click('button:has-text("Add person")');
     await page.waitForSelector('#noCodeNote');

@@ -309,3 +309,13 @@ test('addDays works across month and year ends', () => {
   assert.equal(L.addDays('2026-03-01', -1), '2026-02-28');
   assert.equal(L.addDays('2026-12-31', 1), '2027-01-01');
 });
+
+test('levels: Trainee < User < Admin < Owner; Trainees get Mite Monitoring only', () => {
+  assert.deepEqual([...L.ROLES], ['Trainee', 'User', 'Admin', 'Owner']);
+  assert.deepEqual(L.userSections({ Role: 'Trainee', Sections: 'Mites, Plant Health' }), ['Mites']);
+  assert.equal(L.hasSection({ Role: 'trainee' }, 'Plant Health'), false);
+  assert.deepEqual(L.userSections({ Role: 'User', Sections: '' }), ['Mites', 'Plant Health']);
+  assert.deepEqual(['Trainee', 'User', 'Admin', 'Owner'].map(L.isWorkerRole), [true, true, false, false]);
+  assert.equal(L.can('Trainee', 'createSample'), true);
+  assert.equal(L.can('Trainee', 'reports'), false);
+});

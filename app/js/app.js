@@ -292,7 +292,7 @@ async function viewLogin() {
   const device = await db.getMeta('device');
   if (!device) return viewCodeLogin();
   if (main().querySelector('#whoList')) return;
-  let workers = (await db.getAll('users')).filter((u) => L.normalizeRole(u.Role) === 'User' && u.Active !== false);
+  let workers = (await db.getAll('users')).filter((u) => L.isWorkerRole(u.Role) && u.Active !== false);
   const msg = h('p', { class: 'error', role: 'alert' });
   if (navigator.onLine) {
     try {
@@ -1487,11 +1487,11 @@ async function viewUsers() {
       },
     }, d.Active ? 'Remove' : 'Allow again'))) : h('p', { class: 'muted' }, 'No tablets set up yet. Sign in with your code on a tablet and tick "Set up this tablet".'));
   drawDevices();
-  const levelText = (u) => (u.Role === 'User' ? 'User' : u.Role);
+  const levelText = (u) => L.normalizeRole(u.Role);
   mount(main(),
     h('div', { class: 'page-head' }, h('h1', {}, 'Manage Users'),
       h('a', { class: 'btn primary', href: '#/user/new' }, '+ Add person')),
-    h('p', { class: 'muted' }, 'Users tap their name on a set-up tablet (no code). Admins and owners sign in with their access code. Tap a person to change their details, level, code or access.'),
+    h('p', { class: 'muted' }, 'Trainees and Users tap their name on a set-up tablet (no code). Admins and owners sign in with their access code. People who add themselves on a tablet start as Trainees. Tap a person to change their details, level, code or access.'),
     h('div', { class: 'list' }, users.map((u) => h('a', { class: `sample-card${u.Active ? '' : ' inactive'}`, href: `#/user/${encodeURIComponent(u.UserEmail)}` },
       h('div', { class: 'grow' },
         h('div', { class: 'title' }, displayName(u)),
@@ -1506,7 +1506,7 @@ async function viewUsers() {
 async function viewUserForm(id) {
   const isNew = id === 'new';
   if (needsAdminOnline(isNew ? 'Add user' : 'Edit user')) return;
-  let u = { UserEmail: '', Username: '', FullName: '', Role: 'User', Active: true, AccessCode: '' };
+  let u = { UserEmail: '', Username: '', FullName: '', Role: 'Trainee', Active: true, AccessCode: '' };
   if (!isNew) {
     const { users } = await api('listUsers');
     u = users.find((x) => x.UserEmail.toLowerCase() === id.toLowerCase());
@@ -1520,7 +1520,7 @@ async function viewUserForm(id) {
   const email = h('input', { id: 'UserEmail', type: 'email', value: u.UserEmail, disabled: !isNew, autocomplete: 'off' });
   const roleSel = h('select', { id: 'Role', disabled: isSelf || readOnly }, L.ROLES.map((r) => h('option', { value: r, selected: L.normalizeRole(u.Role) === r }, r)));
   const active = h('input', { id: 'Active', type: 'checkbox', checked: !!u.Active, disabled: isSelf || readOnly, class: 'checkbox' });
-  const userSecs = L.userSections({ ...u, Role: 'x' }); // as stored; admins see everything anyway
+  const userSecs = L.userSections({ ...u, Role: 'User' }); // as stored; admins see everything anyway
   const secBoxes = L.SECTIONS.map((sec) => h('input', {
     type: 'checkbox', class: 'checkbox', id: `section-${sec.replace(/\s+/g, '')}`, value: sec, checked: userSecs.includes(sec), disabled: readOnly,
   }));
@@ -1529,19 +1529,37 @@ async function viewUserForm(id) {
   const msg = h('p', { class: 'error', role: 'alert' });
   const saveBtn = h('button', { class: 'btn primary big', type: 'submit' }, isNew ? 'Add person' : 'Save changes');
   const roleHelp = {
+    Trainee: 'New starters. Mite Monitoring only: collects and analyses samples, reopens their own analyses for 31 days. Taps their name on a set-up tablet — no code needed.',
     User: 'Collects and analyses samples, does plant checks. Reopens their own analyses for 31 days. Taps their name on a set-up tablet — no code needed.',
     Admin: 'Everything a User does, plus all completed and all samples, reports and exports, and correcting any sample. Signs in with a code.',
     Owner: 'Everything an Admin does, plus people, access codes and tablets. Signs in with a code.',
   };
   const codeHint = h('div', { class: 'hint' });
   const codeHelp = () => {
-    codeHint.textContent = readOnly ? '' : roleSel.value === 'User'
-      ? 'Not needed: Users tap their name on a set-up tablet. Give one only if they must sign in somewhere else.'
+    codeHint.textContent = readOnly ? '' : L.isWorkerRole(roleSel.value)
+      ? 'Not needed: Trainees and Users tap their name on a set-up tablet. Give one only if they must sign in somewhere else.'
       : (isNew || !u.AccessCode) ? '4–12 digits. Leave blank and one will be made for them.' : 'Change this to give them a new code (the old one stops working).';
   };
   const roleHint = h('div', { class: 'hint' }, roleHelp[L.normalizeRole(u.Role)]);
-  roleSel.addEventListener('change', () => { roleHint.textContent = roleHelp[roleSel.value]; codeHelp(); });
+  // Sections: Trainees always get Mite Monitoring only; admins and owners everything.
+  const secHint = h('div', { class: 'hint' });
+  const secUpdate = () => {
+    const r = roleSel.value;
+    secBoxes.forEach((b) => {
+      b.disabled = readOnly || r !== 'User';
+      if (r === 'Trainee') b.checked = b.value === 'Mites';
+      else if (L.isAdminRole(r)) b.checked = true;
+    });
+    secHint.textContent = r === 'Trainee' ? 'Trainees can use Mite Monitoring only. Change their level to User to give more.'
+      : L.isAdminRole(r) ? 'Admins and owners can always use everything.' : 'Choose what this person can use.';
+  };
+  roleSel.addEventListener('change', () => {
+    // Moving a Trainee up to User: start them with every section ticked.
+    if (roleSel.value === 'User') secBoxes.forEach((b) => { if (L.normalizeRole(u.Role) !== 'User') b.checked = true; });
+    roleHint.textContent = roleHelp[roleSel.value]; codeHelp(); secUpdate();
+  });
   codeHelp();
+  secUpdate();
 
   // Suggest a username from the name or email while adding someone.
   let usernameTouched = !isNew;
@@ -1601,7 +1619,7 @@ async function viewUserForm(id) {
         h('div', {},
           h('div', { class: 'field' }, h('label', {}, 'Can use'),
             secBoxes.map((b) => h('label', { class: 'check-row', for: b.id }, b, h('span', {}, secLabel[b.value]))),
-            h('div', { class: 'hint' }, 'Admins and owners can always use everything.')),
+            secHint),
           field('Level', roleSel),
           roleHint,
           h('label', { class: 'check-row', for: 'Active' }, active, h('span', {}, 'Can sign in')),

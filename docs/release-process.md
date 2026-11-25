@@ -93,6 +93,12 @@ the new `Setup.gs` and `Api.gs`. After pasting them into the **live** script and
 publishing a new version, choose **Hop Farm → Turn on weekly backup** once in the
 live **Hop Farm Data** (on a computer) and allow the permissions Google asks for.
 
+## Server changes in 1.7.0
+
+1.7.0 adds the **Trainee** level. Paste the new `Setup.gs` and `Api.gs` with the
+app release, then run **Hop Farm → Repair / extend workbook structure** so the
+Role dropdown in the Users tab offers Trainee.
+
 ## Rules of thumb
 
 - Never test with the live app or the live sheets.

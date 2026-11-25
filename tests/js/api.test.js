@@ -691,7 +691,7 @@ test('tablet sign-in: set up once, workers pick their name or add themselves, no
   assert.match(g.post({ action: 'registerWorker', ...LAB, fullName: 'Someone' }).error, /set up by an admin/);
   const sam = g.post({ action: 'registerWorker', device, fullName: '  Sam   Wilson ' });
   assert.equal(sam.ok, true, sam.error);
-  assert.deepEqual([sam.user.FullName, sam.user.Role, sam.user.UserEmail], ['Sam Wilson', 'User', 'sam.wilson@workers.hopfarm']);
+  assert.deepEqual([sam.user.FullName, sam.user.Role, sam.user.UserEmail], ['Sam Wilson', 'Trainee', 'sam.wilson@workers.hopfarm']);
   const sam2 = g.post({ action: 'registerWorker', device, fullName: 'Sam Wilson-Jones', email: 'SJ@farm.nz' });
   assert.equal(sam2.user.UserEmail, 'sj@farm.nz');
   assert.ok(g.post({ action: 'workers', device }).workers.some((w) => w.FullName === 'Sam Wilson'));
@@ -865,4 +865,36 @@ test('roles typed by hand in any capitalisation still work', () => {
   }
   users[ana][iRole] = 'Boss';
   assert.match(g.post({ action: 'login', login: 'ana', code: '111111' }).error, /no valid role/);
+});
+
+test('Trainees: Mite Monitoring only, pick their name on a tablet; new self-added people start as Trainees', () => {
+  const g = createSeededGas({ split: true });
+  const reg = g.post({ action: 'registerDevice', ...ADMIN, deviceName: 'Field tablet' });
+  const device = { id: reg.device.id, token: reg.device.token };
+  const sam = g.post({ action: 'registerWorker', device, fullName: 'Sam New' }).user;
+  assert.equal(sam.Role, 'Trainee');
+  assert.deepEqual(sam.Sections, ['Mites']);
+  assert.ok(g.post({ action: 'workers', device }).workers.some((w) => w.FullName === 'Sam New'), 'on the name list');
+  const asSam = { device, worker: sam.UserEmail };
+  assert.equal(g.post({ action: 'login', ...asSam }).user.Role, 'Trainee');
+
+  // Mites: allowed. Plant Health: refused, even if Sections in the sheet say otherwise.
+  const users = g.setup.sheets.Users.data;
+  users[users.findIndex((r) => r.includes(sam.UserEmail))][users[0].indexOf('Sections')] = 'Mites, Plant Health';
+  let r = push(g, asSam, [newSample('sample-tr01', { CollectorEmail: sam.UserEmail })]);
+  assert.equal(r.results[0].ok, true, r.results[0].error);
+  r = push(g, asSam, [plantCheck('check-tr01', { InspectorEmail: sam.UserEmail })]);
+  assert.equal(r.results[0].ok, false);
+  assert.match(r.results[0].error, /Plant Health/);
+
+  // The owner moves Sam up to User with both sections; adds a Trainee without a code.
+  const save = (user, isNew = false) => g.post({ action: 'saveUser', ...ADMIN, isNew, user });
+  let s = save({ UserEmail: sam.UserEmail, Username: sam.Username, FullName: 'Sam New', Role: 'User', Active: true, Sections: ['Mites', 'Plant Health'] });
+  assert.equal(s.ok, true, s.error);
+  assert.deepEqual(s.user.Sections, ['Mites', 'Plant Health']);
+  s = save({ UserEmail: 'tia@farm.nz', Username: 'tia', FullName: 'Tia Trainee', Role: 'trainee', Sections: ['Plant Health'] }, true);
+  assert.equal(s.ok, true, s.error);
+  assert.equal(s.user.Role, 'Trainee');
+  assert.equal(s.user.AccessCode, '', 'no code needed');
+  assert.deepEqual(s.user.Sections, ['Mites'], 'Trainees get Mite Monitoring only');
 });

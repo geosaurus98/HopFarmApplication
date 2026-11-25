@@ -155,7 +155,11 @@ const STATUS_LIST = [STATUS.DRAFT, STATUS.AWAITING, STATUS.IN_PROGRESS, STATUS.C
  * Admin — User + all completed / all samples, reports, exports, corrections.
  * Owner — Admin + people, access codes and tablets.
  */
-const ROLES = ['User', 'Admin', 'Owner'];
+// Levels, lowest first. Trainee: Mite Monitoring only. User: the sections they're given.
+// Admin: everything plus reports. Owner: also people, codes and tablets.
+const ROLES = ['Trainee', 'User', 'Admin', 'Owner'];
+/** Trainees and Users pick their name on a set-up tablet; Admins and Owners use a code. */
+function isWorkerRole_(r) { const n = normalizeRole_(r); return n === 'Trainee' || n === 'User'; }
 /** Earlier role names, upgraded automatically. */
 const LEGACY_ROLES = { Collector: 'User', Analyst: 'User', Administrator: 'Owner' };
 
@@ -701,6 +705,7 @@ function buildPlantExport() {
 
 /** Sections this user can use. Blank = all sections. */
 function userSections_(u) {
+  if (normalizeRole_(u.Role) === 'Trainee') return ['Mites'];
   const raw = String(u.Sections || '').split(',').map(x => x.trim()).filter(Boolean);
   const valid = raw.filter(x => SECTIONS.indexOf(x) !== -1);
   return valid.length ? valid : SECTIONS.slice();

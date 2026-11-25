@@ -118,11 +118,11 @@ function findUser_(email) {
   return u;
 }
 
-/** A worker who picked their name on a set-up tablet: must be an active User (admins/owners use their code). */
+/** A worker who picked their name on a set-up tablet: must be an active Trainee or User (admins/owners use their code). */
 function workerOnDevice_(email) {
   const u = findUser_(email);
   if (!u || !toBool_(u.Active)) throw authError_('That name is not active any more. Ask an admin.');
-  if (u.Role !== 'User') throw authError_('Admins and owners sign in with their access code.');
+  if (!isWorkerRole_(u.Role)) throw authError_('Admins and owners sign in with their access code.');
   return u;
 }
 
@@ -139,11 +139,11 @@ function identify_(body) {
   return who;
 }
 
-/** Names for the "Who's using the app?" list on a set-up tablet (Users only). */
+/** Names for the "Who's using the app?" list on a set-up tablet (Trainees and Users). */
 function workersFor_(who) {
   if (!who.device && !who.codeUser) throw authError_('This tablet is not set up.');
   return readTable_('Users')
-    .filter(u => String(u.UserEmail || '').trim() && toBool_(u.Active) && normalizeRole_(u.Role) === 'User')
+    .filter(u => String(u.UserEmail || '').trim() && toBool_(u.Active) && isWorkerRole_(u.Role))
     .map(publicUser_)
     .sort((a, b) => a.FullName.localeCompare(b.FullName));
 }
@@ -177,12 +177,12 @@ function registerWorker_(who, body) {
     for (let n = 2; taken.has(username); n++) username = base + n;
     if (!email) email = username + '@workers.hopfarm'; // an ID only; the owner can add details later
     const now = new Date();
-    const rec = { UserEmail: email, Username: username, FullName: fullName, Role: 'User', Sections: SECTIONS.join(', '),
+    const rec = { UserEmail: email, Username: username, FullName: fullName, Role: 'Trainee', Sections: 'Mites',
       Active: true, AccessCode: '', CreatedAt: now, UpdatedAt: now };
     table.insert(rec);
     table.flush();
     appendRows_('AuditLog', [{ AuditID: Utilities.getUuid(), TableName: 'Users', RowID: email,
-      ChangedBy: 'tablet: ' + who.device.DeviceName, ChangedAt: now, Summary: 'Added themselves as a User on a set-up tablet' }], ssFor_('Users'));
+      ChangedBy: 'tablet: ' + who.device.DeviceName, ChangedAt: now, Summary: 'Added themselves as a Trainee on a set-up tablet' }], ssFor_('Users'));
     return { user: publicUser_(rec) };
   } finally {
     lock.releaseLock();
@@ -338,7 +338,7 @@ function actorOf_(who, op) {
   if (who.codeUser && String(who.codeUser.UserEmail).toLowerCase() === actor) return who.codeUser;
   const u = findUser_(actor);
   if (!u) throw new Error('This change was made by someone who is no longer on the list.');
-  if (u.Role !== 'User') throw new Error('Sign in as ' + displayName_(u) + ' (with their code) to upload this change.');
+  if (!isWorkerRole_(u.Role)) throw new Error('Sign in as ' + displayName_(u) + ' (with their code) to upload this change.');
   if (!who.device) throw new Error('This change was made by ' + displayName_(u) + ' on a set-up tablet. Sync on that tablet.');
   if (!toBool_(u.Active)) throw new Error(displayName_(u) + ' is no longer active. Ask an admin.');
   return u;
@@ -705,18 +705,18 @@ function saveUser_(admin, input, isNew) {
     const fullName = String(input.FullName || '').trim();
     if (!fullName) throw new Error('Enter the person\'s full name.');
     const role = normalizeRole_(input.Role);
-    if (ROLES.indexOf(role) === -1) throw new Error('Choose a level: User, Admin or Owner.');
+    if (ROLES.indexOf(role) === -1) throw new Error('Choose a level: Trainee, User, Admin or Owner.');
     const active = input.Active === undefined ? true : toBool_(input.Active);
     const sectionsIn = Array.isArray(input.Sections) ? input.Sections
       : String(input.Sections || '').split(',').map(x => x.trim()).filter(Boolean);
     const sections = SECTIONS.filter(x => sectionsIn.indexOf(x) !== -1);
-    if (input.Sections !== undefined && !sections.length) throw new Error('Choose at least one section (Mite Monitoring or Plant Health).');
+    if (input.Sections !== undefined && !sections.length && role !== 'Trainee') throw new Error('Choose at least one section (Mite Monitoring or Plant Health).');
 
-    // Users pick their name on a set-up tablet, so a code is optional for them.
+    // Trainees and Users pick their name on a set-up tablet, so a code is optional for them.
     // Admins and owners always need one.
     let code = String(input.AccessCode || '').trim();
     const hadCode = existing && String(existing.AccessCode || '').trim();
-    if (!code && !hadCode && role !== 'User') code = newAccessCode_();
+    if (!code && !hadCode && !isWorkerRole_(role)) code = newAccessCode_();
     if (code && !ACCESS_CODE_RE.test(code)) throw new Error('Access code: 4–12 digits, not starting with 0.');
 
     if (isSelf && (!active || role !== 'Owner')) {
@@ -730,7 +730,8 @@ function saveUser_(admin, input, isNew) {
     rec.FullName = fullName;
     rec.Role = role;
     rec.Active = active;
-    if (input.Sections !== undefined || !existing) rec.Sections = (sections.length ? sections : SECTIONS).join(', ');
+    if (role === 'Trainee') rec.Sections = 'Mites'; // Trainees: Mite Monitoring only
+    else if (input.Sections !== undefined || !existing) rec.Sections = (sections.length ? sections : SECTIONS).join(', ');
     if (code) rec.AccessCode = code;
     rec.UpdatedAt = now;
     if (existing) table.touch(rec); else table.insert(rec);
