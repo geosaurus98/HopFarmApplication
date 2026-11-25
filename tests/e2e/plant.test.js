@@ -180,6 +180,15 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
     await page.click('.chart-card:nth-child(1) .bar-group >> nth=0');
     assert.match(await page.textContent('.chart-card:nth-child(1) .chart-readout'), /Row 14 bay 3: 85 cm average height/);
     assert.ok(await page.isVisible('table.timeline td:has-text("C2 - Riwaka")'));
+    // Latest checks table: two checks, newest first, link opens the check.
+    await page.waitForSelector('#latestChecks tbody tr');
+    assert.equal(await page.$$eval('#latestChecks tbody tr', (r) => r.length), 2);
+    const heads = await page.$$eval('#latestChecks th', (t) => t.map((x) => x.textContent));
+    assert.ok(!heads.some((x) => /Season|Week|Inspector/.test(x)), heads.join());
+    await page.click('#latestChecks tbody tr:first-child a.open-check');
+    await page.waitForSelector('text=Overall bine health');
+    await page.click('#backBtn');
+    await page.waitForSelector('#latestChecks');
     await shot('plant-02-reports', { fullPage: true });
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#exportPlant')]);
     const csv = fs.readFileSync(await dl.path(), 'utf8').replace(/^﻿/, '').trim().split('\r\n');

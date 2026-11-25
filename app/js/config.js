@@ -40,4 +40,4 @@ export const IS_LIVE_APP = typeof location !== 'undefined' && LIVE_HOSTS.include
 /** Default server address shown on the sign-in screen (people can still type another). */
 export const DEFAULT_API_URL = IS_LIVE_APP ? LIVE_API_URL : TEST_API_URL;
 
-export const APP_VERSION = '1.6.3';
+export const APP_VERSION = '1.6.4';

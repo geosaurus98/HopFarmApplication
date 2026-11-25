@@ -485,8 +485,47 @@ async function viewPlantReports() {
   };
   tlSeason.addEventListener('change', drawTimeline);
 
+  // Latest checks: one row per bay check, newest first.
+  const tblSeason = h('select', { id: 'latestSeason' }, h('option', { value: '' }, 'All seasons'), seasons.map((x) => h('option', { value: x, selected: x === seasons[0] }, x)));
+  const tblBlock = h('select', { id: 'latestBlock' }, h('option', { value: '' }, 'All blocks'), used.map((b) => h('option', { value: b.BlockVarietyID }, L.blockLabel(b))));
+  const tblBox = h('div', { class: 'table-wrap' });
+  const PAGE = 50;
+  let shown = PAGE;
+  const drawTable = () => {
+    const all = L.plantTableRows(checks.filter((c) => (!tblSeason.value || (c.Season || L.seasonOf(c.InspectionDate)) === tblSeason.value) &&
+      (!tblBlock.value || c.BlockVarietyID === tblBlock.value)));
+    if (!all.length) { mount(tblBox, h('p', { class: 'muted' }, 'No checks match on this tablet.')); return; }
+    const rows = all.slice(0, shown);
+    mount(tblBox,
+      h('table', { class: 'latest-checks', id: 'latestChecks' },
+        h('thead', {}, h('tr', {}, ['Date', 'Block', 'Row / bay', 'Grass length', 'Trellis', 'Growth stage', 'Internode (cm)', 'Overall bine health', 'Leaf size', 'Leaf damage', 'Photo', ''].map((x) => h('th', {}, x)))),
+        h('tbody', {}, rows.map((r) => {
+          const c = r.check;
+          return h('tr', {},
+            h('td', { class: 'nowrap' }, fmtDate(c.InspectionDate)),
+            h('td', {}, `${c.Block || ''} - ${c.Variety || ''}`),
+            h('td', { class: 'nowrap' }, `${c.Row ?? ''} / ${c.Bay ?? ''}`),
+            h('td', {}, c.GrassLength || ''),
+            h('td', {}, c.TrellisIntegrity || ''),
+            h('td', {}, r.stage),
+            h('td', { class: 'nowrap', title: r.internodeBand ? `Measured at ${r.internodeBand}` : '' }, r.internode === '' ? '' : `${r.internode}${r.internodeBand ? ` (${r.internodeBand})` : ''}`),
+            h('td', {}, c.OverallBineHealth || ''),
+            h('td', {}, c.LeafSize || ''),
+            h('td', {}, r.leafDamage ? h('span', { class: 'flag', title: r.leafDamage }, '⚠ ', r.leafDamage) : ''),
+            h('td', { class: 'center' }, r.hasPhoto ? h('span', { class: 'tick', 'aria-label': 'Has photo' }, '✓') : ''),
+            h('td', {}, h('a', { href: `#/plant/${c.CheckID}`, class: 'open-check' }, 'Open →')));
+        }))),
+      all.length > shown ? h('button', { type: 'button', class: 'btn secondary', id: 'latestMore', onclick: () => { shown += PAGE; drawTable(); } },
+        `Show more (${all.length - shown} older)`) : null);
+  };
+  [tblSeason, tblBlock].forEach((el) => el.addEventListener('change', () => { shown = PAGE; drawTable(); }));
+
   mount(ctx.main(),
     h('div', { class: 'page-head' }, h('h1', {}, 'Plant Health Reports')),
+    checks.length ? h('section', { class: 'card' },
+      h('h2', {}, 'Latest checks'),
+      h('p', { class: 'muted small' }, 'Newest first. Internode is the highest band measured. Tap Open to see the whole check.'),
+      h('div', { class: 'row wrap' }, tblSeason, tblBlock), tblBox) : null,
     h('section', { class: 'card' },
       h('h2', {}, 'Download for Excel'),
       h('p', { class: 'muted' }, 'One row per bay check, with a WeekStarting column for weekly PivotTables.'),
@@ -501,6 +540,7 @@ async function viewPlantReports() {
       h('h2', {}, 'When each stage was first recorded'),
       h('div', { class: 'row' }, tlSeason), tlBox) : null);
   if (used.length) drawTrend();
+  if (checks.length) drawTable();
   if (seasons.length) drawTimeline();
 }
 

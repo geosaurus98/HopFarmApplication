@@ -288,3 +288,18 @@ test('normalizeRole accepts any capitalisation and old names', () => {
   assert.deepEqual(['owner', ' Admin ', 'USER', 'Analyst', 'administrator', ''].map(L.normalizeRole), ['Owner', 'Admin', 'User', 'User', 'Owner', '']);
   assert.equal(L.isAdminRole('admin'), true);
 });
+
+test('plant latest-checks table: newest first, highest internode band, damage and photo flags', () => {
+  const rows = L.plantTableRows([
+    { CheckID: 'a', InspectionDate: '2026-11-10', InspectionTime: '09:00', InternodeUnder1mCm: 12, Internode1to2mCm: '', Internode2to3mCm: '', LeafDamage: '' },
+    { CheckID: 'b', InspectionDate: '2026-11-17', InspectionTime: '08:00', InternodeUnder1mCm: 12, Internode1to2mCm: 15, Internode2to3mCm: '', LeafDamage: 'Curling', LeafPhoto2: 'https://drive/x' },
+    { CheckID: 'c', InspectionDate: '2026-11-17', InspectionTime: '10:30', InternodeUnder1mCm: 11, Internode1to2mCm: 14, Internode2to3mCm: 18, GrowthStage: L.PLANT_OPTIONS.GrowthStage[1] },
+    { CheckID: 'd', InspectionDate: '2026-11-18', Deleted: true },
+  ]);
+  assert.deepEqual(rows.map((r) => r.check.CheckID), ['c', 'b', 'a']);
+  assert.deepEqual(rows.map((r) => r.internode), [18, 15, 12]);
+  assert.deepEqual(rows.map((r) => r.internodeBand), ['2–3 m', '1–2 m', '<1 m']);
+  assert.equal(rows[0].stage, 'Training');
+  assert.deepEqual(rows.map((r) => r.leafDamage), ['', 'Curling', '']);
+  assert.deepEqual(rows.map((r) => r.hasPhoto), [false, true, false]);
+});

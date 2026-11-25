@@ -385,3 +385,12 @@ table.timeline td:first-child, table.timeline th:first-child { text-align: left;
 .back-btn { display: inline-flex; align-items: center; gap: .3rem; margin: 0 0 .6rem; padding: .45rem .9rem .45rem .7rem;
   border-radius: 999px; border: 2px solid var(--green-dark, #2e5d1e); color: var(--green-dark, #2e5d1e); font-weight: 700; text-decoration: none; background: #fff; }
 .back-btn:hover { background: rgba(0,0,0,.04); }
+
+/* Plant Health: latest checks table */
+.latest-checks td, .latest-checks th { vertical-align: middle; }
+.latest-checks .nowrap { white-space: nowrap; }
+.latest-checks .center { text-align: center; }
+.latest-checks .flag { color: #a11a1a; font-weight: 700; }
+.latest-checks .tick { color: #2e7d32; font-weight: 800; font-size: 1.15rem; }
+.latest-checks th, .latest-checks td { padding-left: .45rem; padding-right: .45rem; }
+.latest-checks .open-check { white-space: nowrap; font-weight: 700; color: var(--green-dark, #2e5d1e); }

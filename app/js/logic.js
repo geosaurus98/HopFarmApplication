@@ -673,3 +673,25 @@ export function serverMove({ device, session, lastLogin }, { previous = [], move
   }
   return { ...out, changed };
 }
+
+/**
+ * The "Latest checks" table in Plant Health Reports: newest first, with the
+ * internode spacing for the highest band measured (2–3 m, else 1–2 m, else under 1 m).
+ */
+export function plantTableRows(checks) {
+  const has = (v) => v !== '' && v !== null && v !== undefined;
+  const stageIdx = (v) => PLANT_OPTIONS.GrowthStage.indexOf(v);
+  return checks
+    .filter((c) => !toBoolean(c.Deleted))
+    .slice()
+    .sort((a, b) => `${b.InspectionDate || ''} ${b.InspectionTime || ''} ${b.CreatedAt || ''}`
+      .localeCompare(`${a.InspectionDate || ''} ${a.InspectionTime || ''} ${a.CreatedAt || ''}`))
+    .map((c) => ({
+      check: c,
+      internode: has(c.Internode2to3mCm) ? c.Internode2to3mCm : has(c.Internode1to2mCm) ? c.Internode1to2mCm : has(c.InternodeUnder1mCm) ? c.InternodeUnder1mCm : '',
+      internodeBand: has(c.Internode2to3mCm) ? '2–3 m' : has(c.Internode1to2mCm) ? '1–2 m' : has(c.InternodeUnder1mCm) ? '<1 m' : '',
+      stage: stageIdx(c.GrowthStage) >= 0 ? STAGE_SHORT[stageIdx(c.GrowthStage)] : (c.GrowthStage || ''),
+      leafDamage: String(c.LeafDamage || '').trim(),
+      hasPhoto: ['OverviewPhoto', 'LeafPhoto1', 'LeafPhoto2'].some((f) => String(c[f] || '').trim() !== ''),
+    }));
+}
