@@ -399,3 +399,5 @@ table.timeline td:first-child, table.timeline th:first-child { text-align: left;
 .latest-checks th { font-size: .8rem; line-height: 1.2; }
 .latest-checks th, .latest-checks td { padding-left: .35rem; padding-right: .35rem; }
 .latest-checks .flag { font-size: 1.2rem; }
+.latest-checks td.leaf-fill { text-align: center; color: #fff; font-weight: 800; min-width: 3.2rem; box-shadow: inset 0 0 0 2px #fff; }
+.latest-checks td.leaf-fill.light { color: #2b2b00; }

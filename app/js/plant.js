@@ -509,7 +509,10 @@ async function viewPlantReports() {
             h('td', { class: 'nowrap' }, c.Block || ''),
             h('td', {}, c.Variety || ''),
             h('td', {}, c.BineHealth || ''),
-            h('td', { class: 'nowrap' }, c.LeafColour ? [h('span', { class: 'swatch-mini', style: { background: L.LEAF_COLOURS[Number(c.LeafColour) - 1] } }), ` ${c.LeafColour}`] : ''),
+            // The cell is filled with the leaf colour from the chart; the number stays for reference.
+            c.LeafColour && L.LEAF_COLOURS[Number(c.LeafColour) - 1]
+              ? h('td', { class: `leaf-fill${Number(c.LeafColour) <= 3 ? ' light' : ''}`, style: { background: L.LEAF_COLOURS[Number(c.LeafColour) - 1] }, title: `Leaf colour ${c.LeafColour} of ${L.LEAF_COLOURS.length}` }, String(c.LeafColour))
+              : h('td', {}, c.LeafColour || ''),
             h('td', {}, c.WeedPressure || ''),
             num(c.BinesTrained),
             num(c.AvgBineHeightCm),
