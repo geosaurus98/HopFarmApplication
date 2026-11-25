@@ -183,10 +183,14 @@ test('plant health: weekly bay check offline, conditional questions, sync, repor
     // Latest checks table: two checks, newest first, link opens the check.
     await page.waitForSelector('#latestChecks tbody tr');
     assert.equal(await page.$$eval('#latestChecks tbody tr', (r) => r.length), 2);
+    assert.equal(await page.inputValue('#latestPeriod'), '14', 'last 14 days to start with');
+    assert.deepEqual(await page.$$eval('#latestPeriod option', (o) => o.map((x) => x.textContent)), ['Last 7 days', 'Last 14 days', 'Last 30 days', 'All']);
     const heads = await page.$$eval('#latestChecks th', (t) => t.map((x) => x.textContent));
-    assert.ok(!heads.some((x) => /Season|Week|Inspector/.test(x)), heads.join());
+    assert.ok(!heads.some((x) => /Season|Week|Inspector|Row|Grass|Trellis|Growth|Overall|Leaf size/.test(x)), heads.join());
+    assert.ok(['Variety', 'Bine health', 'Bines on string', 'Snapped lateral'].every((x) => heads.includes(x)), heads.join());
     await page.click('#latestChecks tbody tr:first-child a.open-check');
-    await page.waitForSelector('text=Overall bine health');
+    await page.waitForURL(/#\/plant\/[\w-]+$/);
+    await page.waitForSelector('h1:has-text("C2")');
     await page.click('#backBtn');
     await page.waitForSelector('#latestChecks');
     await shot('plant-02-reports', { fullPage: true });

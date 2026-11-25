@@ -303,3 +303,9 @@ test('plant latest-checks table: newest first, highest internode band, damage an
   assert.deepEqual(rows.map((r) => r.leafDamage), ['', 'Curling', '']);
   assert.deepEqual(rows.map((r) => r.hasPhoto), [false, true, false]);
 });
+
+test('addDays works across month and year ends', () => {
+  assert.equal(L.addDays('2026-11-25', -13), '2026-11-12');
+  assert.equal(L.addDays('2026-03-01', -1), '2026-02-28');
+  assert.equal(L.addDays('2026-12-31', 1), '2027-01-01');
+});

@@ -394,3 +394,8 @@ table.timeline td:first-child, table.timeline th:first-child { text-align: left;
 .latest-checks .tick { color: #2e7d32; font-weight: 800; font-size: 1.15rem; }
 .latest-checks th, .latest-checks td { padding-left: .45rem; padding-right: .45rem; }
 .latest-checks .open-check { white-space: nowrap; font-weight: 700; color: var(--green-dark, #2e5d1e); }
+.latest-checks .num { text-align: right; }
+.latest-checks { font-size: .88rem; }
+.latest-checks th { font-size: .8rem; line-height: 1.2; }
+.latest-checks th, .latest-checks td { padding-left: .35rem; padding-right: .35rem; }
+.latest-checks .flag { font-size: 1.2rem; }

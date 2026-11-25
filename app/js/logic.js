@@ -695,3 +695,10 @@ export function plantTableRows(checks) {
       hasPhoto: ['OverviewPhoto', 'LeafPhoto1', 'LeafPhoto2'].some((f) => String(c[f] || '').trim() !== ''),
     }));
 }
+
+/** 'YYYY-MM-DD' plus n days (n may be negative). */
+export function addDays(isoDate, n) {
+  const [y, m, d] = String(isoDate).split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return t.toISOString().slice(0, 10);
+}
