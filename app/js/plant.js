@@ -499,8 +499,8 @@ async function viewPlantReports() {
     const rows = all.slice(0, MAX_ROWS);
     mount(tblBox,
       h('table', { class: 'latest-checks', id: 'latestChecks' },
-        h('thead', {}, h('tr', {}, ['Date', 'Block', 'Variety', 'Bine health', 'Leaf colour', 'Weeds', 'Bines on string', 'Avg height (cm)', 'Max height (cm)',
-          'Internode (cm)', 'Avg lateral (cm)', 'Snapped bine', 'Snapped lateral', 'Leaf damage', 'Photo', ''].map((x) => h('th', {}, x)))),
+        h('thead', {}, h('tr', {}, ['Date', 'Block', 'Variety', 'Bine health', 'Weeds', 'Bines on string', 'Avg height (cm)', 'Max height (cm)',
+          'Internode (cm)', 'Avg lateral (cm)', 'Snapped bine', 'Snapped lateral', 'Leaf damage', 'Leaf colour', 'Photo', ''].map((x) => h('th', {}, x)))),
         h('tbody', {}, rows.map((r) => {
           const c = r.check;
           const num = (v) => h('td', { class: 'num' }, v ?? '');
@@ -509,10 +509,6 @@ async function viewPlantReports() {
             h('td', { class: 'nowrap' }, c.Block || ''),
             h('td', {}, c.Variety || ''),
             h('td', {}, c.BineHealth || ''),
-            // The cell is filled with the leaf colour from the chart; the number stays for reference.
-            c.LeafColour && L.LEAF_COLOURS[Number(c.LeafColour) - 1]
-              ? h('td', { class: `leaf-fill${Number(c.LeafColour) <= 3 ? ' light' : ''}`, style: { background: L.LEAF_COLOURS[Number(c.LeafColour) - 1] }, title: `Leaf colour ${c.LeafColour} of ${L.LEAF_COLOURS.length}` }, String(c.LeafColour))
-              : h('td', {}, c.LeafColour || ''),
             h('td', {}, c.WeedPressure || ''),
             num(c.BinesTrained),
             num(c.AvgBineHeightCm),
@@ -522,6 +518,10 @@ async function viewPlantReports() {
             num(c.SnappedTipsBine),
             num(c.SnappedTipsLateral),
             h('td', { class: 'center' }, r.leafDamage ? h('span', { class: 'flag', title: r.leafDamage, 'aria-label': `Leaf damage: ${r.leafDamage}` }, '⚠') : ''),
+            // The cell is filled with the leaf colour from the chart; the number stays for reference.
+            c.LeafColour && L.LEAF_COLOURS[Number(c.LeafColour) - 1]
+              ? h('td', { class: `leaf-fill${Number(c.LeafColour) <= 3 ? ' light' : ''}`, style: { background: L.LEAF_COLOURS[Number(c.LeafColour) - 1] }, title: `Leaf colour ${c.LeafColour} of ${L.LEAF_COLOURS.length}` }, String(c.LeafColour))
+              : h('td', {}, c.LeafColour || ''),
             h('td', { class: 'center' }, r.hasPhoto ? h('span', { class: 'tick', 'aria-label': 'Has photo' }, '✓') : ''),
             h('td', {}, h('a', { href: `#/plant/${c.CheckID}`, class: 'open-check' }, 'Open')));
         }))),
