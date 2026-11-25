@@ -499,7 +499,7 @@ async function viewPlantReports() {
     const rows = all.slice(0, MAX_ROWS);
     mount(tblBox,
       h('table', { class: 'latest-checks', id: 'latestChecks' },
-        h('thead', {}, h('tr', {}, ['Date', 'Block', 'Variety', 'Bine health', 'Coir', 'Weeds', 'Bines on string', 'Avg height (cm)', 'Max height (cm)',
+        h('thead', {}, h('tr', {}, ['Date', 'Block', 'Variety', 'Bine health', 'Leaf colour', 'Weeds', 'Bines on string', 'Avg height (cm)', 'Max height (cm)',
           'Internode (cm)', 'Avg lateral (cm)', 'Snapped bine', 'Snapped lateral', 'Leaf damage', 'Photo', ''].map((x) => h('th', {}, x)))),
         h('tbody', {}, rows.map((r) => {
           const c = r.check;
@@ -509,7 +509,7 @@ async function viewPlantReports() {
             h('td', { class: 'nowrap' }, c.Block || ''),
             h('td', {}, c.Variety || ''),
             h('td', {}, c.BineHealth || ''),
-            h('td', {}, c.CoirStatus || ''),
+            h('td', { class: 'nowrap' }, c.LeafColour ? [h('span', { class: 'swatch-mini', style: { background: L.LEAF_COLOURS[Number(c.LeafColour) - 1] } }), ` ${c.LeafColour}`] : ''),
             h('td', {}, c.WeedPressure || ''),
             num(c.BinesTrained),
             num(c.AvgBineHeightCm),
